@@ -1,12 +1,14 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { VitePWA } from "vite-plugin-pwa";
 
+const isBuild = process.argv.includes("build");
+
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
-  vite: ({ command }) => ({
-    base: command === "build" ? "/palette-studio/" : "/",
+  vite: {
+    base: isBuild ? "/palette-studio/" : "/",
     plugins: [
       VitePWA({
         registerType: "autoUpdate",
@@ -16,5 +18,5 @@ export default defineConfig({
         injectRegister: null,
       }),
     ],
-  }),
+  },
 });
