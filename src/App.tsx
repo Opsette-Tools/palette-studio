@@ -1,36 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useReducer } from "react";
 import { ConfigProvider, App as AntdApp, Typography } from "antd";
-import { StartCard } from "../components/palette/StartCard";
-import { HarmonyPicker } from "../components/palette/HarmonyPicker";
-import { PaletteGrid } from "../components/palette/PaletteGrid";
-import { ScaleStrips } from "../components/palette/ScaleStrips";
-import { ContrastReport } from "../components/palette/ContrastReport";
-import { TypographyPicker } from "../components/palette/TypographyPicker";
-import { ExportPanel } from "../components/palette/ExportPanel";
-import { buildPalette, type HarmonyRule } from "../lib/harmony";
-import { FONT_PAIRS, loadFontPair } from "../lib/presets";
-import { loadSaved, saveState } from "../lib/storage";
-
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Palette Studio — Color & brand kit generator" },
-      {
-        name: "description",
-        content:
-          "Generate a complete color palette, accessible text pairings, and font combos for your website — no design experience needed.",
-      },
-      { property: "og:title", content: "Palette Studio — Color & brand kit generator" },
-      {
-        property: "og:description",
-        content: "Pick a color or a vibe and get a full, accessible brand palette in seconds.",
-      },
-      { name: "theme-color", content: "#2f4f46" },
-    ],
-  }),
-  component: PaletteStudio,
-});
+import { OpsetteHeader } from "./components/opsette-header";
+import { OpsetteFooterLogo } from "./components/opsette-share";
+import { StartCard } from "./components/palette/StartCard";
+import { HarmonyPicker } from "./components/palette/HarmonyPicker";
+import { PaletteGrid } from "./components/palette/PaletteGrid";
+import { ScaleStrips } from "./components/palette/ScaleStrips";
+import { ContrastReport } from "./components/palette/ContrastReport";
+import { TypographyPicker } from "./components/palette/TypographyPicker";
+import { ExportPanel } from "./components/palette/ExportPanel";
+import { buildPalette, type HarmonyRule } from "./lib/harmony";
+import { FONT_PAIRS, loadFontPair } from "./lib/presets";
+import { loadSaved, saveState } from "./lib/storage";
 
 type State = { baseHex: string; rule: HarmonyRule; fontPairId: string };
 type Action =
@@ -50,7 +31,7 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-function PaletteStudio() {
+export default function App() {
   const [state, dispatch] = useReducer(reducer, INITIAL);
 
   useEffect(() => {
@@ -88,41 +69,7 @@ function PaletteStudio() {
     >
       <AntdApp>
         <div style={{ minHeight: "100dvh", background: "#fafafa" }}>
-          <header
-            style={{
-              position: "sticky",
-              top: 0,
-              zIndex: 10,
-              background: "rgba(250,250,250,0.85)",
-              backdropFilter: "saturate(180%) blur(8px)",
-              borderBottom: "1px solid #ececec",
-            }}
-          >
-            <div
-              style={{
-                maxWidth: 880,
-                margin: "0 auto",
-                padding: "14px 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: "#2f4f46",
-                  letterSpacing: -0.2,
-                }}
-              >
-                Palette Studio
-              </h1>
-              <span style={{ fontSize: 12, color: "#6b7280" }}>Opsette Tools</span>
-            </div>
-          </header>
+          <OpsetteHeader />
           <main
             style={{
               maxWidth: 880,
@@ -168,6 +115,8 @@ function PaletteStudio() {
             <Typography.Paragraph type="secondary" style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
               Palette Studio is part of Opsette Tools · Your last palette is saved on this device.
             </Typography.Paragraph>
+
+            <OpsetteFooterLogo />
           </main>
         </div>
       </AntdApp>
