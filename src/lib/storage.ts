@@ -1,10 +1,11 @@
-import type { HarmonyRule } from "./harmony";
+import type { HarmonyRule, Vibrancy } from "./harmony";
 
 const KEY = "palette-studio:v1";
 
 export type Saved = {
   baseHex: string;
   rule: HarmonyRule;
+  vibrancy: Vibrancy;
   fontPairId: string;
 };
 
@@ -13,7 +14,10 @@ export function loadSaved(): Saved | null {
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Saved;
+    const parsed = JSON.parse(raw) as Partial<Saved>;
+    if (!parsed.baseHex || !parsed.rule || !parsed.fontPairId) return null;
+    // vibrancy was added later — default older saves to "balanced".
+    return { vibrancy: "balanced", ...parsed } as Saved;
   } catch {
     return null;
   }

@@ -45,6 +45,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "culori": "^4.0.2",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "html-to-image": "^1.11.13",
@@ -68,6 +69,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@types/culori": "^4.0.1",
     "@types/node": "^22.16.5",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.0",

@@ -6,6 +6,7 @@ export function toCssVars(p: Palette): string {
     `  --color-primary: ${p.primary};`,
     `  --color-secondary: ${p.secondary};`,
     `  --color-accent: ${p.accent};`,
+    ...(p.accent2 ? [`  --color-accent-2: ${p.accent2};`] : []),
     `  --color-background: ${p.roles.background};`,
     `  --color-surface: ${p.roles.surface};`,
     `  --color-text: ${p.roles.text};`,
@@ -28,7 +29,7 @@ module.exports = {
         primary: ${JSON.stringify(p.primaryScale, null, 10).replace(/\n/g, "\n        ")},
         accent: ${JSON.stringify(p.accentScale, null, 10).replace(/\n/g, "\n        ")},
         neutral: ${JSON.stringify(p.neutrals, null, 10).replace(/\n/g, "\n        ")},
-        secondary: "${p.secondary}",
+        secondary: "${p.secondary}",${p.accent2 ? `\n        accent2: "${p.accent2}",` : ""}
         background: "${p.roles.background}",
         surface: "${p.roles.surface}",
       },

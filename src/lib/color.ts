@@ -1,4 +1,7 @@
 // Pure color math: HSL conversions, hue rotation, WCAG contrast.
+// Scale building is done perceptually in OKLCH — see oklch.ts.
+
+import { hexToOklch, oklchToHex } from "./oklch";
 
 export type RGB = { r: number; g: number; b: number };
 export type HSL = { h: number; s: number; l: number };
@@ -82,29 +85,45 @@ export function withHsl(hex: string, patch: Partial<HSL>): string {
   return hslToHex({ ...hexToHsl(hex), ...patch });
 }
 
-// 50-900 tint/shade scale, anchoring near input.
+// 50-900 tint/shade scale. Stops are walked along OKLCH lightness (perceptually
+// even), holding the brand hue constant. Chroma is tapered toward the extremes
+// so the lightest tints don't read as washed-neon and the darkest shades don't
+// turn muddy — the multiplier curve is what gives Radix/Tailwind ramps their
+// professional, "designed" feel.
 const SCALE_STOPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
-const SCALE_L = [0.97, 0.93, 0.86, 0.76, 0.65, 0.54, 0.44, 0.35, 0.25, 0.15];
+// Perceived lightness per stop, in OKLCH L (0..1).
+const SCALE_OKL = [0.97, 0.93, 0.86, 0.78, 0.70, 0.62, 0.53, 0.44, 0.34, 0.25];
+// Chroma multiplier per stop — full vividness through the mid stops, eased off
+// at the very light and very dark ends.
+const SCALE_C_TAPER = [0.35, 0.5, 0.72, 0.88, 0.97, 1.0, 0.96, 0.86, 0.7, 0.55];
 
 export type Scale = Record<(typeof SCALE_STOPS)[number], string>;
 
+// The mid (500) stop anchors chroma for the whole ramp. We give it a healthy
+// baseline so even a desaturated input still yields a usable, colorful scale.
+function scaleBaseChroma(c: number): number {
+  return Math.max(0.08, Math.min(0.22, c));
+}
+
 export function buildScale(hex: string): Scale {
-  const { h, s } = hexToHsl(hex);
-  const sat = Math.max(0.25, Math.min(0.85, s));
+  const { h, c } = hexToOklch(hex);
+  const baseC = scaleBaseChroma(c);
   const out = {} as Scale;
   SCALE_STOPS.forEach((stop, i) => {
-    out[stop] = hslToHex({ h, s: sat, l: SCALE_L[i] });
+    out[stop] = oklchToHex({ l: SCALE_OKL[i], c: baseC * SCALE_C_TAPER[i], h });
   });
   return out;
 }
 
-const NEUTRAL_L = [0.985, 0.96, 0.91, 0.83, 0.7, 0.55, 0.42, 0.3, 0.2, 0.11];
+const NEUTRAL_OKL = [0.985, 0.96, 0.92, 0.85, 0.74, 0.62, 0.5, 0.39, 0.28, 0.18];
 
+// Near-grey ramp carrying just a hint of the brand hue, so neutrals feel like
+// they belong to the palette rather than being flat greys.
 export function buildNeutralRamp(primaryHex: string): Scale {
-  const { h } = hexToHsl(primaryHex);
+  const { h } = hexToOklch(primaryHex);
   const out = {} as Scale;
   SCALE_STOPS.forEach((stop, i) => {
-    out[stop] = hslToHex({ h, s: 0.06, l: NEUTRAL_L[i] });
+    out[stop] = oklchToHex({ l: NEUTRAL_OKL[i], c: 0.008, h });
   });
   return out;
 }

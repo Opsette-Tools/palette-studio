@@ -1,10 +1,12 @@
-import { hexToHsl, hslToHex, rotateHue, withHsl, buildScale, buildNeutralRamp, type Scale } from "./color";
+import { hslToHex, withHsl, buildScale, buildNeutralRamp, type Scale } from "./color";
+import { hexToOklch, oklchToHex, rotateHueOklch, withOklch, clampL, clampC, type Oklch } from "./oklch";
 
 export type HarmonyRule =
   | "complementary"
   | "analogous"
   | "triadic"
   | "split"
+  | "tetradic"
   | "monochromatic";
 
 export const HARMONY_OPTIONS: { value: HarmonyRule; label: string; caption: string }[] = [
@@ -12,39 +14,77 @@ export const HARMONY_OPTIONS: { value: HarmonyRule; label: string; caption: stri
   { value: "analogous", label: "Analogous", caption: "Neighbors on the wheel — calm and cohesive." },
   { value: "triadic", label: "Triadic", caption: "Three evenly-spaced hues — playful and balanced." },
   { value: "split", label: "Split-complementary", caption: "Softer than complementary, still vibrant." },
+  { value: "tetradic", label: "Tetradic", caption: "Four hues in two pairs — rich and versatile." },
   { value: "monochromatic", label: "Monochromatic", caption: "One hue, different lightness — minimal and refined." },
 ];
+
+// Vibrancy scales the base chroma before harmonizing — one control with a big
+// visual range that fixes the "every palette feels mid-tone" problem.
+export type Vibrancy = "muted" | "balanced" | "vibrant";
+
+export const VIBRANCY_OPTIONS: { value: Vibrancy; label: string }[] = [
+  { value: "muted", label: "Muted" },
+  { value: "balanced", label: "Balanced" },
+  { value: "vibrant", label: "Vibrant" },
+];
+
+const VIBRANCY_CHROMA: Record<Vibrancy, number> = {
+  muted: 0.55,
+  balanced: 1.0,
+  vibrant: 1.5,
+};
 
 export type HarmonyResult = {
   primary: string;
   secondary: string;
   accent: string;
+  accent2?: string; // present only for tetradic (4th member)
 };
 
-export function harmonize(baseHex: string, rule: HarmonyRule): HarmonyResult {
-  const hsl = hexToHsl(baseHex);
-  // Nudge base toward usable saturation/lightness for UI primary.
-  const primary = hslToHex({
-    h: hsl.h,
-    s: Math.max(0.35, Math.min(0.75, hsl.s || 0.5)),
-    l: Math.max(0.3, Math.min(0.55, hsl.l || 0.45)),
-  });
+// Pull the base into a usable, consistent OKLCH band for a UI primary, then
+// apply vibrancy to chroma. Holding L and C steady across members is what makes
+// rotated hues read as one coordinated family.
+function primaryOklch(baseHex: string, vibrancy: Vibrancy): Oklch {
+  const o = hexToOklch(baseHex);
+  // Anchor lightness into a mid band good for primary buttons / brand color.
+  const l = clampL(Math.max(0.45, Math.min(0.62, o.l || 0.55)));
+  // Give even desaturated inputs a usable baseline chroma, then scale by vibrancy.
+  const baseC = Math.max(0.07, Math.min(0.18, o.c || 0.12));
+  const c = clampC(baseC * VIBRANCY_CHROMA[vibrancy]);
+  return { l, c, h: o.h };
+}
+
+export function harmonize(baseHex: string, rule: HarmonyRule, vibrancy: Vibrancy = "balanced"): HarmonyResult {
+  const base = primaryOklch(baseHex, vibrancy);
+  const primary = oklchToHex(base);
+  const rot = (deg: number) => oklchToHex(rotateHueOklch(base, deg));
+
   switch (rule) {
-    case "complementary":
-      return { primary, secondary: rotateHue(primary, 180), accent: rotateHue(primary, 180) };
+    case "complementary": {
+      // Fix the old collapse (secondary === accent). secondary is the true
+      // +180 complement; accent is a third, distinct "bridge" color — the same
+      // complement pushed lighter and slightly less saturated so it works as a
+      // soft accent rather than a duplicate of secondary.
+      const comp = rotateHueOklch(base, 180);
+      const bridge = withOklch(comp, {
+        l: clampL(comp.l + 0.12),
+        c: clampC(comp.c * 0.72),
+      });
+      return { primary, secondary: oklchToHex(comp), accent: oklchToHex(bridge) };
+    }
     case "analogous":
-      return { primary, secondary: rotateHue(primary, -30), accent: rotateHue(primary, 30) };
+      return { primary, secondary: rot(-30), accent: rot(30) };
     case "triadic":
-      return { primary, secondary: rotateHue(primary, 120), accent: rotateHue(primary, -120) };
+      return { primary, secondary: rot(120), accent: rot(-120) };
     case "split":
-      return { primary, secondary: rotateHue(primary, 150), accent: rotateHue(primary, 210) };
+      return { primary, secondary: rot(150), accent: rot(210) };
+    case "tetradic":
+      return { primary, secondary: rot(90), accent: rot(180), accent2: rot(270) };
     case "monochromatic": {
-      const h = hexToHsl(primary).h;
-      return {
-        primary,
-        secondary: hslToHex({ h, s: 0.5, l: 0.65 }),
-        accent: hslToHex({ h, s: 0.7, l: 0.4 }),
-      };
+      // Same hue, step perceived lightness in OKLCH (not arbitrary HSL S/L).
+      const lighter = withOklch(base, { l: clampL(base.l + 0.18), c: clampC(base.c * 0.85) });
+      const darker = withOklch(base, { l: clampL(base.l - 0.18), c: clampC(base.c * 1.05) });
+      return { primary, secondary: oklchToHex(lighter), accent: oklchToHex(darker) };
     }
   }
 }
@@ -52,9 +92,11 @@ export function harmonize(baseHex: string, rule: HarmonyRule): HarmonyResult {
 export type Palette = {
   base: string;
   rule: HarmonyRule;
+  vibrancy: Vibrancy;
   primary: string;
   secondary: string;
   accent: string;
+  accent2?: string;
   neutrals: Scale;
   primaryScale: Scale;
   accentScale: Scale;
@@ -67,15 +109,17 @@ export type Palette = {
   };
 };
 
-export function buildPalette(base: string, rule: HarmonyRule): Palette {
-  const { primary, secondary, accent } = harmonize(base, rule);
+export function buildPalette(base: string, rule: HarmonyRule, vibrancy: Vibrancy = "balanced"): Palette {
+  const { primary, secondary, accent, accent2 } = harmonize(base, rule, vibrancy);
   const neutrals = buildNeutralRamp(primary);
   return {
     base,
     rule,
+    vibrancy,
     primary,
     secondary,
     accent,
+    accent2,
     neutrals,
     primaryScale: buildScale(primary),
     accentScale: buildScale(accent),

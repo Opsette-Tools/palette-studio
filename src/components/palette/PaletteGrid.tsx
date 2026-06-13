@@ -50,6 +50,9 @@ export function PaletteGrid({ palette }: { palette: Palette }) {
     { label: "Primary", hex: palette.primary, hint: "Use for primary buttons, links, key brand moments." },
     { label: "Secondary", hex: palette.secondary, hint: "Supporting actions, secondary buttons, highlights." },
     { label: "Accent", hex: palette.accent, hint: "Sparingly — badges, callouts, small details." },
+    ...(palette.accent2
+      ? [{ label: "Accent 2", hex: palette.accent2, hint: "The fourth tetradic hue — extra variety for charts or tags." }]
+      : []),
     { label: "Background", hex: palette.roles.background, hint: "The page background — biggest surface." },
     { label: "Surface", hex: palette.roles.surface, hint: "Cards, modals, anything elevated above the page." },
     { label: "Text", hex: palette.roles.text, hint: "Body copy and headings on light surfaces." },

@@ -1,9 +1,14 @@
+import type { ReactNode } from "react";
 import { Card, Radio, Typography } from "antd";
 import { HARMONY_OPTIONS, type HarmonyRule } from "../../lib/harmony";
 
-type Props = { value: HarmonyRule; onChange: (r: HarmonyRule) => void };
+type Props = {
+  value: HarmonyRule;
+  onChange: (r: HarmonyRule) => void;
+  vibrancy?: ReactNode;
+};
 
-export function HarmonyPicker({ value, onChange }: Props) {
+export function HarmonyPicker({ value, onChange, vibrancy }: Props) {
   const current = HARMONY_OPTIONS.find((o) => o.value === value)!;
   return (
     <Card title="2. Choose a harmony rule">
@@ -21,6 +26,7 @@ export function HarmonyPicker({ value, onChange }: Props) {
       <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
         {current.caption}
       </Typography.Paragraph>
+      {vibrancy}
     </Card>
   );
 }
