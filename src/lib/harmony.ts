@@ -34,6 +34,25 @@ const VIBRANCY_CHROMA: Record<Vibrancy, number> = {
   vibrant: 1.5,
 };
 
+// Temperature nudges the base hue warm or cool before harmonizing, so the whole
+// family tilts together and stays coherent. Applied in OKLCH degrees; a modest
+// shift reads clearly without breaking the harmony relationships.
+export type Temperature = "cool" | "neutral" | "warm";
+
+export const TEMPERATURE_OPTIONS: { value: Temperature; label: string }[] = [
+  { value: "cool", label: "Cooler" },
+  { value: "neutral", label: "Neutral" },
+  { value: "warm", label: "Warmer" },
+];
+
+// Positive degrees walk hue toward warm (reds/oranges ~30°), negative toward
+// cool (blues ~250°).
+const TEMPERATURE_SHIFT: Record<Temperature, number> = {
+  cool: -14,
+  neutral: 0,
+  warm: 14,
+};
+
 export type HarmonyResult = {
   primary: string;
   secondary: string;
@@ -44,18 +63,25 @@ export type HarmonyResult = {
 // Pull the base into a usable, consistent OKLCH band for a UI primary, then
 // apply vibrancy to chroma. Holding L and C steady across members is what makes
 // rotated hues read as one coordinated family.
-function primaryOklch(baseHex: string, vibrancy: Vibrancy): Oklch {
+function primaryOklch(baseHex: string, vibrancy: Vibrancy, temperature: Temperature): Oklch {
   const o = hexToOklch(baseHex);
   // Anchor lightness into a mid band good for primary buttons / brand color.
   const l = clampL(Math.max(0.45, Math.min(0.62, o.l || 0.55)));
   // Give even desaturated inputs a usable baseline chroma, then scale by vibrancy.
   const baseC = Math.max(0.07, Math.min(0.18, o.c || 0.12));
   const c = clampC(baseC * VIBRANCY_CHROMA[vibrancy]);
-  return { l, c, h: o.h };
+  // Tilt the whole family warm or cool by nudging the anchor hue.
+  const h = ((o.h + TEMPERATURE_SHIFT[temperature]) % 360 + 360) % 360;
+  return { l, c, h };
 }
 
-export function harmonize(baseHex: string, rule: HarmonyRule, vibrancy: Vibrancy = "balanced"): HarmonyResult {
-  const base = primaryOklch(baseHex, vibrancy);
+export function harmonize(
+  baseHex: string,
+  rule: HarmonyRule,
+  vibrancy: Vibrancy = "balanced",
+  temperature: Temperature = "neutral",
+): HarmonyResult {
+  const base = primaryOklch(baseHex, vibrancy, temperature);
   const primary = oklchToHex(base);
   const rot = (deg: number) => oklchToHex(rotateHueOklch(base, deg));
 
@@ -93,6 +119,7 @@ export type Palette = {
   base: string;
   rule: HarmonyRule;
   vibrancy: Vibrancy;
+  temperature: Temperature;
   primary: string;
   secondary: string;
   accent: string;
@@ -109,13 +136,19 @@ export type Palette = {
   };
 };
 
-export function buildPalette(base: string, rule: HarmonyRule, vibrancy: Vibrancy = "balanced"): Palette {
-  const { primary, secondary, accent, accent2 } = harmonize(base, rule, vibrancy);
+export function buildPalette(
+  base: string,
+  rule: HarmonyRule,
+  vibrancy: Vibrancy = "balanced",
+  temperature: Temperature = "neutral",
+): Palette {
+  const { primary, secondary, accent, accent2 } = harmonize(base, rule, vibrancy, temperature);
   const neutrals = buildNeutralRamp(primary);
   return {
     base,
     rule,
     vibrancy,
+    temperature,
     primary,
     secondary,
     accent,

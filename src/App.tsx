@@ -5,30 +5,33 @@ import { OpsetteFooterLogo } from "./components/opsette-share";
 import { StartCard } from "./components/palette/StartCard";
 import { HarmonyPicker } from "./components/palette/HarmonyPicker";
 import { VibrancyPicker } from "./components/palette/VibrancyPicker";
+import { TemperaturePicker } from "./components/palette/TemperaturePicker";
 import { PaletteGrid } from "./components/palette/PaletteGrid";
 import { ScaleStrips } from "./components/palette/ScaleStrips";
 import { ContrastReport } from "./components/palette/ContrastReport";
 import { TypographyPicker } from "./components/palette/TypographyPicker";
 import { ExportPanel } from "./components/palette/ExportPanel";
-import { buildPalette, type HarmonyRule, type Vibrancy } from "./lib/harmony";
+import { buildPalette, type HarmonyRule, type Vibrancy, type Temperature } from "./lib/harmony";
 import { FONT_PAIRS, loadFontPair } from "./lib/presets";
 import { loadSaved, saveState } from "./lib/storage";
 
-type State = { baseHex: string; rule: HarmonyRule; vibrancy: Vibrancy; fontPairId: string };
+type State = { baseHex: string; rule: HarmonyRule; vibrancy: Vibrancy; temperature: Temperature; fontPairId: string };
 type Action =
   | { type: "setBase"; hex: string }
   | { type: "setRule"; rule: HarmonyRule }
   | { type: "setVibrancy"; vibrancy: Vibrancy }
+  | { type: "setTemperature"; temperature: Temperature }
   | { type: "setFont"; id: string }
   | { type: "hydrate"; state: State };
 
-const INITIAL: State = { baseHex: "#2f6f8f", rule: "analogous", vibrancy: "balanced", fontPairId: "inter" };
+const INITIAL: State = { baseHex: "#2f6f8f", rule: "analogous", vibrancy: "balanced", temperature: "neutral", fontPairId: "inter" };
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
     case "setBase": return { ...s, baseHex: a.hex };
     case "setRule": return { ...s, rule: a.rule };
     case "setVibrancy": return { ...s, vibrancy: a.vibrancy };
+    case "setTemperature": return { ...s, temperature: a.temperature };
     case "setFont": return { ...s, fontPairId: a.id };
     case "hydrate": return a.state;
   }
@@ -56,8 +59,8 @@ export default function App() {
   }, [fontPair]);
 
   const palette = useMemo(
-    () => buildPalette(state.baseHex, state.rule, state.vibrancy),
-    [state.baseHex, state.rule, state.vibrancy],
+    () => buildPalette(state.baseHex, state.rule, state.vibrancy, state.temperature),
+    [state.baseHex, state.rule, state.vibrancy, state.temperature],
   );
 
   return (
@@ -101,10 +104,16 @@ export default function App() {
               value={state.rule}
               onChange={(rule) => dispatch({ type: "setRule", rule })}
               vibrancy={
-                <VibrancyPicker
-                  value={state.vibrancy}
-                  onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
-                />
+                <>
+                  <VibrancyPicker
+                    value={state.vibrancy}
+                    onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
+                  />
+                  <TemperaturePicker
+                    value={state.temperature}
+                    onChange={(temperature) => dispatch({ type: "setTemperature", temperature })}
+                  />
+                </>
               }
             />
             <PaletteGrid palette={palette} />
