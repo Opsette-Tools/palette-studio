@@ -24,9 +24,9 @@ function Tile({ s }: { s: Swatch }) {
           background: s.hex,
           color: fg,
           border: "none",
-          borderRadius: 14,
-          padding: 16,
-          height: 130,
+          borderRadius: 12,
+          padding: 12,
+          height: 96,
           textAlign: "left",
           cursor: "pointer",
           display: "flex",
@@ -63,10 +63,11 @@ export function PaletteGrid({ palette }: { palette: Palette }) {
   return (
     <Card title="3. Your palette" extra={<span style={{ fontSize: 12, color: "#6b7280" }}>Tap any swatch to copy</span>}>
       <div
+        className="ps-swatch-grid"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-          gap: 12,
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 10,
         }}
       >
         {swatches.map((s) => (

@@ -1,7 +1,8 @@
-import { Card, Radio, Typography } from "antd";
+import { Card, Radio, Select, Typography } from "antd";
 import { useEffect } from "react";
 import { FONT_PAIRS, loadFontPair, type FontPair } from "../../lib/presets";
 import type { Palette } from "../../lib/harmony";
+import { useIsMobile } from "../../hooks/use-mobile";
 
 type Props = {
   pair: FontPair;
@@ -10,23 +11,35 @@ type Props = {
 };
 
 export function TypographyPicker({ pair, onChange, palette }: Props) {
+  const isMobile = useIsMobile();
   useEffect(() => {
     FONT_PAIRS.forEach(loadFontPair);
   }, []);
 
   return (
     <Card title="5. Font pairing">
-      <Radio.Group
-        value={pair.id}
-        onChange={(e) => onChange(FONT_PAIRS.find((f) => f.id === e.target.value)!)}
-        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
-      >
-        {FONT_PAIRS.map((f) => (
-          <Radio.Button key={f.id} value={f.id}>
-            {f.label}
-          </Radio.Button>
-        ))}
-      </Radio.Group>
+      {isMobile ? (
+        // Same as the harmony rule — wrapping buttons get messy on phones.
+        <Select
+          value={pair.id}
+          onChange={(id) => onChange(FONT_PAIRS.find((f) => f.id === id)!)}
+          options={FONT_PAIRS.map((f) => ({ label: f.label, value: f.id }))}
+          style={{ width: "100%" }}
+          size="large"
+        />
+      ) : (
+        <Radio.Group
+          value={pair.id}
+          onChange={(e) => onChange(FONT_PAIRS.find((f) => f.id === e.target.value)!)}
+          style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+        >
+          {FONT_PAIRS.map((f) => (
+            <Radio.Button key={f.id} value={f.id}>
+              {f.label}
+            </Radio.Button>
+          ))}
+        </Radio.Group>
+      )}
       <div
         style={{
           marginTop: 16,

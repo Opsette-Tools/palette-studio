@@ -24,7 +24,7 @@ type Action =
   | { type: "setFont"; id: string }
   | { type: "hydrate"; state: State };
 
-const INITIAL: State = { baseHex: "#2f6f8f", rule: "analogous", vibrancy: "balanced", temperature: "neutral", fontPairId: "inter" };
+const INITIAL: State = { baseHex: "#2f6f8f", rule: "exact", vibrancy: "balanced", temperature: "neutral", fontPairId: "inter" };
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -71,22 +71,33 @@ export default function App() {
           fontFamily: '"Inter", system-ui, sans-serif',
           borderRadius: 10,
         },
+        components: {
+          Select: {
+            // Replace the default muddy-grey selected row with a clean brand tint.
+            optionSelectedBg: "#eef3f1",
+            optionSelectedColor: "#2f4f46",
+            optionSelectedFontWeight: 600,
+          },
+        },
       }}
     >
       <AntdApp>
         <div style={{ minHeight: "100dvh", background: "#fafafa" }}>
           <OpsetteHeader />
           <main
+            className="ps-layout"
             style={{
-              maxWidth: 880,
+              maxWidth: 1320,
               margin: "0 auto",
-              padding: "20px 16px 64px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
+              padding: "20px 24px 64px",
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 20,
+              alignItems: "start",
             }}
           >
-            <section style={{ marginBottom: 4 }}>
+            {/* Full-width header */}
+            <section style={{ gridColumn: "1 / -1", marginBottom: 4 }}>
               <Typography.Title level={2} style={{ margin: 0, fontSize: 24, color: "#2f4f46" }}>
                 Build a palette you'll trust.
               </Typography.Title>
@@ -96,10 +107,15 @@ export default function App() {
               </Typography.Paragraph>
             </section>
 
-            <StartCard
-              value={state.baseHex}
-              onChange={(hex) => dispatch({ type: "setBase", hex })}
-            />
+            {/* Full width — the entry point; the photo tab needs the room */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <StartCard
+                value={state.baseHex}
+                onChange={(hex) => dispatch({ type: "setBase", hex })}
+              />
+            </div>
+
+            {/* Cause + effect, side by side on wide screens */}
             <HarmonyPicker
               value={state.rule}
               onChange={(rule) => dispatch({ type: "setRule", rule })}
@@ -117,24 +133,36 @@ export default function App() {
               }
             />
             <PaletteGrid palette={palette} />
-            <ScaleStrips
-              primary={palette.primaryScale}
-              accent={palette.accentScale}
-              neutrals={palette.neutrals}
-            />
+
+            {/* Scales span full width — the 10-stop strips need horizontal room */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <ScaleStrips
+                primary={palette.primaryScale}
+                accent={palette.accentScale}
+                neutrals={palette.neutrals}
+              />
+            </div>
+
+            {/* Accessibility + fonts, side by side */}
             <ContrastReport palette={palette} />
             <TypographyPicker
               pair={fontPair}
               onChange={(p) => dispatch({ type: "setFont", id: p.id })}
               palette={palette}
             />
-            <ExportPanel palette={palette} fontPair={fontPair} />
 
-            <Typography.Paragraph type="secondary" style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
+            {/* Full width — export code blocks + preview need the room */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <ExportPanel palette={palette} fontPair={fontPair} />
+            </div>
+
+            <Typography.Paragraph type="secondary" style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: 12, marginTop: 16 }}>
               Palette Studio is part of Opsette Tools · Your last palette is saved on this device.
             </Typography.Paragraph>
 
-            <OpsetteFooterLogo />
+            <div style={{ gridColumn: "1 / -1" }}>
+              <OpsetteFooterLogo />
+            </div>
           </main>
         </div>
       </AntdApp>

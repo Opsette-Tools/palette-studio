@@ -2,6 +2,7 @@ import { hslToHex, withHsl, buildScale, buildNeutralRamp, type Scale } from "./c
 import { hexToOklch, oklchToHex, rotateHueOklch, withOklch, clampL, clampC, type Oklch } from "./oklch";
 
 export type HarmonyRule =
+  | "exact"
   | "complementary"
   | "analogous"
   | "triadic"
@@ -10,6 +11,7 @@ export type HarmonyRule =
   | "monochromatic";
 
 export const HARMONY_OPTIONS: { value: HarmonyRule; label: string; caption: string }[] = [
+  { value: "exact", label: "My exact color", caption: "Builds the whole palette around the color you picked — lighter and darker shades of it. Vibrancy and temperature still tune it." },
   { value: "complementary", label: "Complementary", caption: "Opposites on the wheel — high contrast and energetic." },
   { value: "analogous", label: "Analogous", caption: "Neighbors on the wheel — calm and cohesive." },
   { value: "triadic", label: "Triadic", caption: "Three evenly-spaced hues — playful and balanced." },
@@ -60,15 +62,20 @@ export type HarmonyResult = {
   accent2?: string; // present only for tetradic (4th member)
 };
 
-// Pull the base into a usable, consistent OKLCH band for a UI primary, then
-// apply vibrancy to chroma. Holding L and C steady across members is what makes
-// rotated hues read as one coordinated family.
+// Turn the picked color into the family's anchor. The guiding principle: the
+// user must SEE their color in the result. So we keep their lightness and chroma
+// as-is wherever they're usable, and only pull them back when the color is so
+// extreme it can't function as a primary (near-white, near-black, near-grey).
+// This is a safety RAIL, not a normalizer — a vivid mid-bright pick like a bright
+// yellow passes through essentially untouched, so rotated companions read as
+// "their color's opposite/neighbors" rather than a substitute's.
 function primaryOklch(baseHex: string, vibrancy: Vibrancy, temperature: Temperature): Oklch {
   const o = hexToOklch(baseHex);
-  // Anchor lightness into a mid band good for primary buttons / brand color.
-  const l = clampL(Math.max(0.45, Math.min(0.62, o.l || 0.55)));
-  // Give even desaturated inputs a usable baseline chroma, then scale by vibrancy.
-  const baseC = Math.max(0.07, Math.min(0.18, o.c || 0.12));
+  // Wide usable band: only rescue the unusable extremes. Most picks pass through.
+  const l = clampL(Math.max(0.32, Math.min(0.82, o.l || 0.55)));
+  // Preserve the picked chroma; only lift a near-grey to a usable baseline so it
+  // still yields a colorful family. Vibrancy then scales from the picked chroma.
+  const baseC = Math.max(0.05, o.c || 0.05);
   const c = clampC(baseC * VIBRANCY_CHROMA[vibrancy]);
   // Tilt the whole family warm or cool by nudging the anchor hue.
   const h = ((o.h + TEMPERATURE_SHIFT[temperature]) % 360 + 360) % 360;
@@ -86,6 +93,15 @@ export function harmonize(
   const rot = (deg: number) => oklchToHex(rotateHueOklch(base, deg));
 
   switch (rule) {
+    case "exact": {
+      // Single-hue family anchored to the user's color. Unlike the old frozen
+      // version, this rides the live `base` anchor, so vibrancy (chroma) and
+      // temperature (hue tilt) move it like every other rule — the user sees
+      // their color influencing the palette and responding to the controls.
+      const lighter = withOklch(base, { l: clampL(base.l + 0.16), c: clampC(base.c * 0.78) });
+      const darker = withOklch(base, { l: clampL(base.l - 0.18), c: clampC(base.c * 1.04) });
+      return { primary, secondary: oklchToHex(lighter), accent: oklchToHex(darker) };
+    }
     case "complementary": {
       // Fix the old collapse (secondary === accent). secondary is the true
       // +180 complement; accent is a third, distinct "bridge" color — the same
