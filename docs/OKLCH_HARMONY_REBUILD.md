@@ -126,3 +126,34 @@ Everything else (exact L/C taper curves, stop values, chroma reduction amounts) 
 - Vibrancy toggle produces a clear muted↔vibrant range.
 - Scales (50→900) look smooth with no neon/muddy extremes.
 - No consumer changed behavior except the additive new field(s).
+
+---
+
+## Completion notes — 2026-06-15 (build session, two split sprints)
+
+**Status: SHIPPED.** Both sprints built, verified in the running app by Ruthnie, built, committed, and pushed to `Opsette-Tools/palette-studio` main (personal `deebuilt` identity, confirmed before each commit).
+
+### Sprint 1 — OKLCH rebuild — commit `24bd6d5`
+- **New OKLCH core** in `src/lib/oklch.ts` (new file): `hexToOklch` / `oklchToHex` (with sRGB gamut clamp via culori's `clampChroma`), `rotateHueOklch`, `withOklch`, plus `clampL`/`clampC`. Round-trips verified exact. Added `culori` dependency.
+- **Scales rebuilt in OKLCH** (`src/lib/color.ts`): `buildScale` + `buildNeutralRamp` now walk perceived lightness with chroma tapered at the extremes (no neon tints / muddy shades). `Scale` 50→900 shape unchanged.
+- **`harmonize()` rebuilt in OKLCH** (`src/lib/harmony.ts`): holds L & C, rotates H, so members read as a family.
+  - **Complementary collapse fixed** — `secondary` is the true +180 complement; `accent` is a distinct lighter, lower-chroma "bridge" tone. Returns 3 distinct colors.
+  - **Monochromatic** rebuilt as a true OKLCH lightness ramp.
+  - Split-complementary ported as-is (it was already correct — did not "fix the ghost").
+- **Tetradic added** with additive optional `accent2?` field on `Palette`. Surfaced as an "Accent 2" swatch in `PaletteGrid` (conditional) and in exporters (CSS var `--color-accent-2`, Tailwind `accent2`).
+- **Vibrancy control** (Muted / Balanced / Vibrant, default Balanced) — scales base chroma before harmonizing. New `VibrancyPicker.tsx`; threaded through `buildPalette` → App state/reducer → persisted in `storage.ts` (older saves default to balanced).
+- Contract held: `Palette`/`Scale` shapes stable, so `ScaleStrips`, `ContrastReport`, `BrandKitPreview` needed no changes. Typecheck clean.
+
+### Sprint 2 — Temperature control — commit `fd2726a`
+- **Temperature** (Cooler / Neutral / Warmer, default Neutral) — nudges the base hue ±14° in OKLCH before harmonizing, tilting the whole family warm/cool while keeping harmony. New `TemperaturePicker.tsx`; threaded through `harmonize`/`buildPalette` → App state → storage (older saves default to neutral). New `temperature` field on `Palette`.
+- **Also bumped deploy actions** in `.github/workflows/deploy.yml` for GitHub Actions Node-24 runtime compliance: `checkout@v4→v5`, `setup-node@v4→v5`, `upload-pages-artifact@v3→v4`. `node-version` left at `20` (matches sibling Opsette repos; the deprecation was about action *runtimes*, not the build's Node version).
+
+### Product forks (all confirmed by Ruthnie)
+1. Tetradic 4th color → **(a) optional `accent2` field** ✓
+2. Vibrancy default → **Balanced** ✓
+3. Temperature → was deferred in the plan, but **built same day in Sprint 2** ✓
+
+### Discrepancies / notes for future sessions
+- The plan said "split-complementary is correct, don't fix it" — confirmed against code, left alone.
+- Production build emits a non-blocking "chunks larger than 500 kB" advisory (pre-existing, AntD bundle). Not addressed; candidate for a future code-splitting pass if bundle size matters.
+- Process note: the Sprint 2 feature commit shipped *before* this completion entry was written — the doc update should have ridden along in `fd2726a`. Recorded here so the doc stays the source of truth.
