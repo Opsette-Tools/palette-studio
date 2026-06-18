@@ -56,8 +56,12 @@ export function ScaleStrips({
 }) {
   return (
     <Card title="Tint & shade scales">
+      <Typography.Paragraph type="secondary" style={{ marginTop: 0, fontSize: 12 }}>
+        Even tints and shades, generated from your colors — handy for hover states, borders, and
+        tinted backgrounds. Tap any stop to copy.
+      </Typography.Paragraph>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Strip label="Primary 50–900" scale={primary} />
+        <Strip label="Buttons / CTA 50–900" scale={primary} />
         <Strip label="Accent 50–900" scale={accent} />
         <Strip label="Neutral 50–900 (tinted gray)" scale={neutrals} />
       </div>

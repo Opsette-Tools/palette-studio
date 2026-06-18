@@ -1,5 +1,21 @@
-import { hslToHex, withHsl, buildScale, buildNeutralRamp, type Scale } from "./color";
-import { hexToOklch, oklchToHex, rotateHueOklch, withOklch, clampL, clampC, type Oklch } from "./oklch";
+import {
+  hslToHex,
+  withHsl,
+  buildScale,
+  buildNeutralRamp,
+  normalizeHex,
+  readableOn,
+  type Scale,
+} from "./color";
+import {
+  hexToOklch,
+  oklchToHex,
+  rotateHueOklch,
+  withOklch,
+  clampL,
+  clampC,
+  type Oklch,
+} from "./oklch";
 
 export type HarmonyRule =
   | "exact"
@@ -8,16 +24,42 @@ export type HarmonyRule =
   | "triadic"
   | "split"
   | "tetradic"
-  | "monochromatic";
+  | "monochromatic"
+  | "custom";
 
 export const HARMONY_OPTIONS: { value: HarmonyRule; label: string; caption: string }[] = [
-  { value: "exact", label: "My exact color", caption: "Builds the whole palette around the color you picked — lighter and darker shades of it. Vibrancy and temperature still tune it." },
-  { value: "complementary", label: "Complementary", caption: "Opposites on the wheel — high contrast and energetic." },
-  { value: "analogous", label: "Analogous", caption: "Neighbors on the wheel — calm and cohesive." },
-  { value: "triadic", label: "Triadic", caption: "Three evenly-spaced hues — playful and balanced." },
-  { value: "split", label: "Split-complementary", caption: "Softer than complementary, still vibrant." },
+  {
+    value: "exact",
+    label: "My exact color",
+    caption:
+      "Builds the whole palette around the color you picked — lighter and darker shades of it. Vibrancy and temperature still tune it.",
+  },
+  {
+    value: "complementary",
+    label: "Complementary",
+    caption: "Opposites on the wheel — high contrast and energetic.",
+  },
+  {
+    value: "analogous",
+    label: "Analogous",
+    caption: "Neighbors on the wheel — calm and cohesive.",
+  },
+  {
+    value: "triadic",
+    label: "Triadic",
+    caption: "Three evenly-spaced hues — playful and balanced.",
+  },
+  {
+    value: "split",
+    label: "Split-complementary",
+    caption: "Softer than complementary, still vibrant.",
+  },
   { value: "tetradic", label: "Tetradic", caption: "Four hues in two pairs — rich and versatile." },
-  { value: "monochromatic", label: "Monochromatic", caption: "One hue, different lightness — minimal and refined." },
+  {
+    value: "monochromatic",
+    label: "Monochromatic",
+    caption: "One hue, different lightness — minimal and refined.",
+  },
 ];
 
 // Vibrancy scales the base chroma before harmonizing — one control with a big
@@ -78,7 +120,7 @@ function primaryOklch(baseHex: string, vibrancy: Vibrancy, temperature: Temperat
   const baseC = Math.max(0.05, o.c || 0.05);
   const c = clampC(baseC * VIBRANCY_CHROMA[vibrancy]);
   // Tilt the whole family warm or cool by nudging the anchor hue.
-  const h = ((o.h + TEMPERATURE_SHIFT[temperature]) % 360 + 360) % 360;
+  const h = (((o.h + TEMPERATURE_SHIFT[temperature]) % 360) + 360) % 360;
   return { l, c, h };
 }
 
@@ -122,7 +164,11 @@ export function harmonize(
       return { primary, secondary: rot(150), accent: rot(210) };
     case "tetradic":
       return { primary, secondary: rot(90), accent: rot(180), accent2: rot(270) };
-    case "monochromatic": {
+    // "custom" never reaches harmonize via the generated path (buildCustomPalette
+    // owns it), but sharing the monochromatic body means a stray single-color
+    // custom input still falls back to a sensible "shades of your one color" set.
+    case "monochromatic":
+    case "custom": {
       // Same hue, step perceived lightness in OKLCH (not arbitrary HSL S/L).
       const lighter = withOklch(base, { l: clampL(base.l + 0.18), c: clampC(base.c * 0.85) });
       const darker = withOklch(base, { l: clampL(base.l - 0.18), c: clampC(base.c * 1.05) });
@@ -150,6 +196,10 @@ export type Palette = {
     mutedText: string;
     border: string;
   };
+  /** Present only for "My own colors" palettes — the exact colors the user
+   *  supplied, with their assigned role and optional custom name. When set, the
+   *  palette grid and brand kit show ONLY these (no derived swatches). */
+  custom?: CustomColor[];
 };
 
 export function buildPalette(
@@ -179,6 +229,117 @@ export function buildPalette(
       mutedText: neutrals[600],
       border: neutrals[200],
     },
+  };
+}
+
+// The role each supplied color can be assigned to, in PLAIN LANGUAGE that matches
+// how people actually label their own colors ("page background", "buttons") —
+// not design-system jargon. Each maps onto an internal Palette key (see
+// buildCustomPalette) so the grid, contrast report, preview, brand kit, and
+// export all keep working with no derivation.
+export type CustomRole =
+  | "pageBg"
+  | "sectionBg"
+  | "bodyText"
+  | "button"
+  | "accent"
+  | "secondaryText"
+  | "border";
+
+export type CustomColor = {
+  hex: string;
+  role: CustomRole;
+  /** User's own label for this color, e.g. "Paper" — optional. */
+  name?: string;
+};
+
+export const CUSTOM_ROLE_OPTIONS: { value: CustomRole; label: string; hint: string }[] = [
+  {
+    value: "button",
+    label: "Buttons / CTA",
+    hint: "Your main buttons, calls-to-action, headings, and links.",
+  },
+  { value: "accent", label: "Accent", hint: "Highlights, badges, and small details." },
+  { value: "pageBg", label: "Page background", hint: "The color behind your whole page." },
+  {
+    value: "sectionBg",
+    label: "Card background",
+    hint: "Cards and panels that sit on top of the page.",
+  },
+  { value: "bodyText", label: "Body text", hint: "Your paragraphs and headings." },
+  { value: "secondaryText", label: "Muted text", hint: "Captions and quieter labels." },
+  { value: "border", label: "Border", hint: "Lines, dividers, and input outlines." },
+];
+
+// Suggest a default role for a color purely from its lightness/chroma, so the
+// rows start with a sensible guess the user can override. Lightest → page
+// background, next-lightest → section background, darkest → body text, colorful
+// mid-tones → buttons then accent, low-chroma mid → secondary text.
+export function suggestRole(hex: string, index: number): CustomRole {
+  const { l, c } = hexToOklch(hex);
+  if (l >= 0.9) return index === 0 ? "pageBg" : "sectionBg";
+  if (l <= 0.28) return "bodyText";
+  if (c >= 0.05) return index <= 3 ? "button" : "accent";
+  return "secondaryText";
+}
+
+// Build a palette from colors the user assigns to roles directly. We show ONLY
+// the colors she typed — nothing is invented. Every role that drives the app
+// (primary/secondary/accent + the roles map) is filled from her assignments;
+// the scale strips are built from her primary/accent so the export stays
+// complete, but no extra *swatches* are conjured. Any role she leaves unassigned
+// falls back to a readable default derived from the colors she DID give, never a
+// random hue — so a 2-color palette still renders legible text and surfaces.
+export function buildCustomPalette(colors: CustomColor[]): Palette {
+  const cleaned = colors
+    .filter((c) => /^#[0-9a-fA-F]{6}$/.test(normalizeHex(c.hex)))
+    .map((c) => ({ ...c, hex: normalizeHex(c.hex) }));
+
+  // First color assigned to each role wins; later duplicates are ignored.
+  const byRole = (role: CustomRole): string | undefined =>
+    cleaned.find((c) => c.role === role)?.hex;
+
+  // Sort the supplied colors by lightness to pick smart fallbacks for any role
+  // the user didn't explicitly assign.
+  const byLight = [...cleaned].sort((a, b) => hexToOklch(a.hex).l - hexToOklch(b.hex).l);
+  const lightest = byLight[byLight.length - 1]?.hex ?? "#ffffff";
+  const darkest = byLight[0]?.hex ?? "#111111";
+
+  // Map the plain-language roles onto the internal Palette keys the whole app
+  // reads. "Buttons / CTA" is the app's `primary` (it's what drives the button
+  // preview + the white/dark-on-button contrast check).
+  const background = byRole("pageBg") ?? lightest;
+  const surface = byRole("sectionBg") ?? background;
+  const text = byRole("bodyText") ?? (readableOn(background) === "#ffffff" ? "#ffffff" : darkest);
+  const button = byRole("button") ?? byRole("accent") ?? darkest;
+  const accent = byRole("accent") ?? button;
+
+  return {
+    base: button,
+    rule: "custom",
+    vibrancy: "balanced",
+    temperature: "neutral",
+    primary: button,
+    // The "Secondary" button in previews is an outline of the button color, so
+    // internal `secondary` just tracks the button color.
+    secondary: button,
+    accent,
+    accent2: undefined,
+    // Scales/neutrals power the export and brand-kit ramps; they're built from
+    // the user's own button/accent colors so they stay faithful to her palette.
+    neutrals: buildNeutralRamp(button),
+    primaryScale: buildScale(button),
+    accentScale: buildScale(accent),
+    roles: {
+      background,
+      surface,
+      text,
+      // Secondary text falls back to a readable softer tone, never an invented hue.
+      mutedText:
+        byRole("secondaryText") ?? (readableOn(background) === "#ffffff" ? "#cbd5e1" : "#64748b"),
+      border: byRole("border") ?? (readableOn(background) === "#ffffff" ? "#334155" : "#e2e8f0"),
+    },
+    custom: cleaned,
   };
 }
 

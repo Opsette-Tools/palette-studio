@@ -1,6 +1,6 @@
 import { Card, Tag, Typography } from "antd";
 import type { Palette } from "../../lib/harmony";
-import { contrastRatio, wcagLevel } from "../../lib/color";
+import { contrastRatio, wcagLevel, readableOn } from "../../lib/color";
 
 type Pair = { label: string; fg: string; bg: string; note: string };
 
@@ -12,13 +12,50 @@ function levelColor(level: string) {
 }
 
 export function ContrastReport({ palette }: { palette: Palette }) {
+  // For buttons/badges the app auto-picks the readable label color (black or
+  // white) for each background — so the report checks THAT color, telling the
+  // truth about what actually renders rather than assuming white.
+  const onPrimary = readableOn(palette.primary);
+  const onAccent = readableOn(palette.accent);
+  const labelWord = (hex: string) => (hex === "#ffffff" ? "White" : "Dark");
+
   const pairs: Pair[] = [
-    { label: "Body text on background", fg: palette.roles.text, bg: palette.roles.background, note: "Most of your reading happens here." },
-    { label: "Body text on surface", fg: palette.roles.text, bg: palette.roles.surface, note: "Card content." },
-    { label: "Muted text on background", fg: palette.roles.mutedText, bg: palette.roles.background, note: "Captions, hints." },
-    { label: "White on primary", fg: "#ffffff", bg: palette.primary, note: "Primary button label." },
-    { label: "White on accent", fg: "#ffffff", bg: palette.accent, note: "Accent badges or buttons." },
-    { label: "Primary on background", fg: palette.primary, bg: palette.roles.background, note: "Links and primary text moments." },
+    {
+      label: "Body text on page background",
+      fg: palette.roles.text,
+      bg: palette.roles.background,
+      note: "Most of your reading happens here.",
+    },
+    {
+      label: "Body text on card background",
+      fg: palette.roles.text,
+      bg: palette.roles.surface,
+      note: "Text inside cards and panels.",
+    },
+    {
+      label: "Muted text on page background",
+      fg: palette.roles.mutedText,
+      bg: palette.roles.background,
+      note: "Captions and hints.",
+    },
+    {
+      label: `${labelWord(onPrimary)} text on your buttons`,
+      fg: onPrimary,
+      bg: palette.primary,
+      note: "Your button / CTA label.",
+    },
+    {
+      label: `${labelWord(onAccent)} text on accent`,
+      fg: onAccent,
+      bg: palette.accent,
+      note: "Accent badges or buttons.",
+    },
+    {
+      label: "Buttons / CTA on page background",
+      fg: palette.primary,
+      bg: palette.roles.background,
+      note: "Links and headings in your brand color.",
+    },
   ];
 
   return (

@@ -1,6 +1,7 @@
 import { Card, Tooltip, message } from "antd";
 import { CopyOutlined } from "@ant-design/icons";
 import type { Palette } from "../../lib/harmony";
+import { CUSTOM_ROLE_OPTIONS } from "../../lib/harmony";
 import { readableOn } from "../../lib/color";
 
 type Swatch = {
@@ -45,23 +46,76 @@ function Tile({ s }: { s: Swatch }) {
   );
 }
 
+function roleLabel(role: string): string {
+  return CUSTOM_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role;
+}
+
 export function PaletteGrid({ palette }: { palette: Palette }) {
-  const swatches: Swatch[] = [
-    { label: "Primary", hex: palette.primary, hint: "Use for primary buttons, links, key brand moments." },
-    { label: "Secondary", hex: palette.secondary, hint: "Supporting actions, secondary buttons, highlights." },
-    { label: "Accent", hex: palette.accent, hint: "Sparingly — badges, callouts, small details." },
-    ...(palette.accent2
-      ? [{ label: "Accent 2", hex: palette.accent2, hint: "The fourth tetradic hue — extra variety for charts or tags." }]
-      : []),
-    { label: "Background", hex: palette.roles.background, hint: "The page background — biggest surface." },
-    { label: "Surface", hex: palette.roles.surface, hint: "Cards, modals, anything elevated above the page." },
-    { label: "Text", hex: palette.roles.text, hint: "Body copy and headings on light surfaces." },
-    { label: "Muted text", hex: palette.roles.mutedText, hint: "Captions, hints, secondary labels." },
-    { label: "Border", hex: palette.roles.border, hint: "Dividers, input borders, subtle outlines." },
-  ];
+  // Custom palette: show ONLY the colors the user supplied, labeled with their
+  // own name (or the role they assigned). Nothing is derived or invented here.
+  const swatches: Swatch[] = palette.custom
+    ? palette.custom.map((c) => ({
+        label: c.name?.trim() || roleLabel(c.role),
+        hex: c.hex,
+        hint: c.name?.trim() ? `${roleLabel(c.role)} · ${c.hex}` : "Tap to copy.",
+      }))
+    : [
+        {
+          label: "Buttons / CTA",
+          hex: palette.primary,
+          hint: "Your main buttons, calls-to-action, headings, and links.",
+        },
+        {
+          label: "Secondary button",
+          hex: palette.secondary,
+          hint: "The quieter, outline-style button.",
+        },
+        {
+          label: "Accent",
+          hex: palette.accent,
+          hint: "Sparingly — badges, callouts, small details.",
+        },
+        ...(palette.accent2
+          ? [
+              {
+                label: "Accent 2",
+                hex: palette.accent2,
+                hint: "An extra accent — handy for charts or tags.",
+              },
+            ]
+          : []),
+        {
+          label: "Page background",
+          hex: palette.roles.background,
+          hint: "The color behind your whole page.",
+        },
+        {
+          label: "Card background",
+          hex: palette.roles.surface,
+          hint: "Cards and panels that sit on top of the page.",
+        },
+        {
+          label: "Body text",
+          hex: palette.roles.text,
+          hint: "Your paragraphs and headings.",
+        },
+        {
+          label: "Muted text",
+          hex: palette.roles.mutedText,
+          hint: "Captions, hints, quieter labels.",
+        },
+        {
+          label: "Border",
+          hex: palette.roles.border,
+          hint: "Dividers, input borders, subtle outlines.",
+        },
+      ];
 
   return (
-    <Card title="3. Your palette" extra={<span style={{ fontSize: 12, color: "#6b7280" }}>Tap any swatch to copy</span>}>
+    <Card
+      title="3. Your palette"
+      extra={<span style={{ fontSize: 12, color: "#6b7280" }}>Tap any swatch to copy</span>}
+    >
       <div
         className="ps-swatch-grid"
         style={{
@@ -70,8 +124,8 @@ export function PaletteGrid({ palette }: { palette: Palette }) {
           gap: 10,
         }}
       >
-        {swatches.map((s) => (
-          <Tile key={s.label} s={s} />
+        {swatches.map((s, i) => (
+          <Tile key={`${s.label}-${i}`} s={s} />
         ))}
       </div>
     </Card>

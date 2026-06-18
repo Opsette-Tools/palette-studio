@@ -155,14 +155,31 @@
   background-color: #f4f7f6 !important;
 }
 
-/* App layout: two-column grid on wide screens, single column on mobile.
-   The grid-template-columns here overrides the inline default below 768px. */
+/* App layout: two-column grids on wide screens, single column on mobile.
+   The inner grids carry inline grid-template-columns, so we override below 768px.
+   `.ps-layout > div` catches both the generated-mode grid and the custom-mode
+   lower grid; `.ps-custom-split` is the editor + live-preview row. */
 @media (max-width: 767px) {
-  .ps-layout {
+  .ps-layout > div,
+  .ps-custom-split {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+  /* The sticky live preview shouldn't pin on phones — it stacks under the editor. */
+  .ps-sticky-preview {
+    position: static !important;
   }
   /* Palette swatches: 4-up on desktop, 2-up on phones so they stay legible. */
   .ps-swatch-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  /* Custom-color rows: a tidy grid on desktop, but the hex/role/name fields need
+     to wrap on phones rather than crush. Swatch + hex on the first line, role +
+     name below, delete tucked to the end. */
+  .ps-custom-row {
+    grid-template-columns: 36px 1fr auto !important;
+  }
+  .ps-custom-row > :nth-child(3),
+  .ps-custom-row > :nth-child(4) {
+    grid-column: 2 / 4 !important;
   }
 }

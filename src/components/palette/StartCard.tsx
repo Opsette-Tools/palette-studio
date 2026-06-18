@@ -1,24 +1,44 @@
-import { Card, ColorPicker, Input, Segmented, Select, Button, Typography, Space, Upload, message } from "antd";
+import {
+  Card,
+  ColorPicker,
+  Input,
+  Segmented,
+  Select,
+  Button,
+  Typography,
+  Space,
+  Upload,
+  message,
+} from "antd";
 import { ThunderboltOutlined, CameraOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import type { UploadProps } from "antd";
 import { VIBES } from "../../lib/presets";
 import { normalizeHex } from "../../lib/color";
-import { randomBase } from "../../lib/harmony";
+import { randomBase, suggestRole, type CustomColor } from "../../lib/harmony";
 import { loadImageFile, extractPalette, sampleColorAt } from "../../lib/image-colors";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { CustomPaletteFields } from "./CustomPaletteFields";
 
 const MODE_OPTIONS = [
   { label: "Pick a color", value: "color" },
   { label: "Pick a vibe", value: "vibe" },
   { label: "From a photo", value: "photo" },
+  { label: "My own colors", value: "custom" },
   { label: "Surprise me", value: "surprise" },
 ] as const;
 
-type Props = { value: string; onChange: (hex: string) => void };
-type Mode = "color" | "vibe" | "photo" | "surprise";
+type Props = {
+  value: string;
+  onChange: (hex: string) => void;
+  /** Custom mode: the colors the user assigned (role + optional name). */
+  customColors: CustomColor[];
+  /** Fired when the custom color list changes; empty array → leave custom mode. */
+  onCustomChange: (colors: CustomColor[]) => void;
+};
+type Mode = "color" | "vibe" | "photo" | "custom" | "surprise";
 
-export function StartCard({ value, onChange }: Props) {
+export function StartCard({ value, onChange, customColors, onCustomChange }: Props) {
   const isMobile = useIsMobile();
   const [mode, setMode] = useState<Mode>("color");
   const [hexInput, setHexInput] = useState(value);
@@ -52,6 +72,24 @@ export function StartCard({ value, onChange }: Props) {
     return Upload.LIST_IGNORE; // we handle the file ourselves; no AntD upload list
   };
 
+  // Switching modes is also the on/off switch for custom-palette building in
+  // App: entering "custom" hands App the current hex list; leaving it clears the
+  // list so App falls back to the single-base generated palette.
+  function changeMode(next: Mode) {
+    setMode(next);
+    if (next === "custom") {
+      // Seed with the user's current color (as primary) if she hasn't built a
+      // custom list yet, so the panel opens with something to work from.
+      onCustomChange(
+        customColors.length
+          ? customColors
+          : [{ hex: normalizeHex(value), role: suggestRole(normalizeHex(value), 0), name: "" }],
+      );
+    } else {
+      onCustomChange([]);
+    }
+  }
+
   function pickAt(e: React.MouseEvent<HTMLImageElement>) {
     const img = imgRef.current;
     if (!img) return;
@@ -65,14 +103,17 @@ export function StartCard({ value, onChange }: Props) {
     }
   }
 
+  const customMode = mode === "custom";
+
   return (
     <Card title="1. Start with a color">
       {/* Always-visible color control — the single source of truth, usable from
-          every mode. The swatch IS the visual color picker; the hex field edits
-          it by text. No duplicate picker buried inside "Pick a color". */}
+          every generated mode. The swatch IS the visual color picker; the hex
+          field edits it by text. Hidden in "My own colors" mode, where the user
+          supplies every role color directly and there's no single base. */}
       <div
         style={{
-          display: "flex",
+          display: customMode ? "none" : "flex",
           alignItems: "center",
           gap: 12,
           padding: "10px 12px",
@@ -82,10 +123,7 @@ export function StartCard({ value, onChange }: Props) {
           border: "1px solid #eef0ef",
         }}
       >
-        <ColorPicker
-          value={value}
-          onChange={(c) => onChange("#" + c.toHex())}
-        >
+        <ColorPicker value={value} onChange={(c) => onChange("#" + c.toHex())}>
           <span
             role="button"
             title="Click to open the color picker"
@@ -124,7 +162,7 @@ export function StartCard({ value, onChange }: Props) {
         // keeps every mode readable.
         <Select
           value={mode}
-          onChange={(v) => setMode(v as Mode)}
+          onChange={(v) => changeMode(v as Mode)}
           options={MODE_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
           style={{ width: "100%" }}
           size="large"
@@ -133,16 +171,20 @@ export function StartCard({ value, onChange }: Props) {
         <Segmented
           block
           value={mode}
-          onChange={(v) => setMode(v as Mode)}
+          onChange={(v) => changeMode(v as Mode)}
           options={MODE_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
         />
       )}
       <div style={{ marginTop: 20 }}>
         {mode === "color" && (
           <Typography.Text type="secondary">
-            Click the color swatch above to open the picker, or type a hex code —
-            we'll build everything else from it.
+            Click the color swatch above to open the picker, or type a hex code — we'll build
+            everything else from it.
           </Typography.Text>
+        )}
+
+        {mode === "custom" && (
+          <CustomPaletteFields colors={customColors} onChange={onCustomChange} />
         )}
 
         {mode === "vibe" && (
@@ -265,8 +307,8 @@ export function StartCard({ value, onChange }: Props) {
                 </div>
 
                 <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                  Tap anywhere on the photo to grab that exact color — or pick one of
-                  the main colors we found below.
+                  Tap anywhere on the photo to grab that exact color — or pick one of the main
+                  colors we found below.
                 </Typography.Text>
 
                 {swatches.length > 0 && (
@@ -287,9 +329,7 @@ export function StartCard({ value, onChange }: Props) {
                             borderRadius: 10,
                             background: hex,
                             cursor: "pointer",
-                            border: selected
-                              ? "3px solid #2f4f46"
-                              : "1px solid rgba(0,0,0,0.12)",
+                            border: selected ? "3px solid #2f4f46" : "1px solid rgba(0,0,0,0.12)",
                           }}
                         />
                       );

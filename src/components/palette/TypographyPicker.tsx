@@ -2,6 +2,7 @@ import { Card, Radio, Select, Typography } from "antd";
 import { useEffect } from "react";
 import { FONT_PAIRS, loadFontPair, type FontPair } from "../../lib/presets";
 import type { Palette } from "../../lib/harmony";
+import { readableOn } from "../../lib/color";
 import { useIsMobile } from "../../hooks/use-mobile";
 
 type Props = {
@@ -69,8 +70,8 @@ export function TypographyPicker({ pair, onChange, palette }: Props) {
             color: palette.roles.text,
           }}
         >
-          This is what body copy will look like on a card surface. Notice the rhythm
-          between the heading and the body — that's the pairing doing its job.
+          This is what body copy will look like on a card surface. Notice the rhythm between the
+          heading and the body — that's the pairing doing its job.
         </div>
         <div
           style={{
@@ -86,7 +87,7 @@ export function TypographyPicker({ pair, onChange, palette }: Props) {
           <button
             style={{
               background: palette.primary,
-              color: "#fff",
+              color: readableOn(palette.primary),
               border: "none",
               borderRadius: 8,
               padding: "8px 14px",
@@ -114,7 +115,7 @@ export function TypographyPicker({ pair, onChange, palette }: Props) {
           <span
             style={{
               background: palette.accent,
-              color: "#fff",
+              color: readableOn(palette.accent),
               borderRadius: 999,
               padding: "4px 10px",
               fontFamily: pair.bodyFamily,
