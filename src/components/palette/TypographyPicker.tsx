@@ -1,4 +1,4 @@
-import { Card, Radio, Select, Typography } from "antd";
+import { Card, Select, Typography } from "antd";
 import { useEffect } from "react";
 import { FONT_PAIRS, loadFontPair, type FontPair } from "../../lib/presets";
 import type { Palette } from "../../lib/harmony";
@@ -19,28 +19,25 @@ export function TypographyPicker({ pair, onChange, palette }: Props) {
 
   return (
     <Card title="5. Font pairing">
-      {isMobile ? (
-        // Same as the harmony rule — wrapping buttons get messy on phones.
-        <Select
-          value={pair.id}
-          onChange={(id) => onChange(FONT_PAIRS.find((f) => f.id === id)!)}
-          options={FONT_PAIRS.map((f) => ({ label: f.label, value: f.id }))}
-          style={{ width: "100%" }}
-          size="large"
-        />
-      ) : (
-        <Radio.Group
-          value={pair.id}
-          onChange={(e) => onChange(FONT_PAIRS.find((f) => f.id === e.target.value)!)}
-          style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
-        >
-          {FONT_PAIRS.map((f) => (
-            <Radio.Button key={f.id} value={f.id}>
-              {f.label}
-            </Radio.Button>
-          ))}
-        </Radio.Group>
-      )}
+      {/* One dropdown for the whole font library — each option renders in its own
+          heading font so the menu doubles as a type preview. */}
+      <Select
+        value={pair.id}
+        onChange={(id) => onChange(FONT_PAIRS.find((f) => f.id === id)!)}
+        style={{ width: "100%" }}
+        size={isMobile ? "large" : "middle"}
+        labelRender={({ value }) => {
+          const f = FONT_PAIRS.find((p) => p.id === value);
+          return <span style={{ fontFamily: f?.headingFamily }}>{f?.label}</span>;
+        }}
+        options={FONT_PAIRS.map((f) => ({
+          value: f.id,
+          label: <span style={{ fontFamily: f.headingFamily, fontSize: 15 }}>{f.label}</span>,
+        }))}
+        onDropdownVisibleChange={(open) => {
+          if (open) FONT_PAIRS.forEach(loadFontPair);
+        }}
+      />
       <div
         style={{
           marginTop: 16,
@@ -57,7 +54,7 @@ export function TypographyPicker({ pair, onChange, palette }: Props) {
             fontWeight: 700,
             fontSize: 28,
             lineHeight: 1.15,
-            color: palette.primary,
+            color: palette.roles.heading,
           }}
         >
           Your brand, beautifully balanced.
