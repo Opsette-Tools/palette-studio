@@ -193,6 +193,7 @@ export type Palette = {
     background: string;
     surface: string;
     text: string;
+    heading: string;
     mutedText: string;
     border: string;
   };
@@ -226,6 +227,9 @@ export function buildPalette(
       background: neutrals[50],
       surface: "#ffffff",
       text: neutrals[900],
+      // Headings share the body ink by default — bigger/bolder, same color — which
+      // is how most real sites read. The CTA/brand color stays on buttons & links.
+      heading: neutrals[900],
       mutedText: neutrals[600],
       border: neutrals[200],
     },
@@ -241,6 +245,7 @@ export type CustomRole =
   | "pageBg"
   | "sectionBg"
   | "bodyText"
+  | "heading"
   | "button"
   | "accent"
   | "secondaryText"
@@ -266,7 +271,8 @@ export const CUSTOM_ROLE_OPTIONS: { value: CustomRole; label: string; hint: stri
     label: "Card background",
     hint: "Cards and panels that sit on top of the page.",
   },
-  { value: "bodyText", label: "Body text", hint: "Your paragraphs and headings." },
+  { value: "heading", label: "Heading", hint: "Your titles and section headings." },
+  { value: "bodyText", label: "Body text", hint: "Your paragraphs and longer copy." },
   { value: "secondaryText", label: "Muted text", hint: "Captions and quieter labels." },
   { value: "border", label: "Border", hint: "Lines, dividers, and input outlines." },
 ];
@@ -281,6 +287,76 @@ export function suggestRole(hex: string, index: number): CustomRole {
   if (l <= 0.28) return "bodyText";
   if (c >= 0.05) return index <= 3 ? "button" : "accent";
   return "secondaryText";
+}
+
+// Assign roles across a WHOLE list of colors at once so each color gets a
+// DISTINCT role — used when we auto-seed from a photo or a pasted hex list.
+// suggestRole() alone judges each color in isolation, so two similar colors can
+// both land on (say) "Muted text", producing duplicate roles and a confusing kit.
+// Here we score every color for every still-unclaimed role and hand each color
+// the best role no one better-suited has already taken. Extra colors beyond the
+// seven named roles fall back to "Accent" (the one role that's fine to repeat).
+export function suggestRolesForList(hexes: string[]): CustomRole[] {
+  // Priority order we want to fill, best-anchored roles first.
+  const ROLE_ORDER: CustomRole[] = [
+    "pageBg",
+    "bodyText",
+    "button",
+    "accent",
+    "heading",
+    "sectionBg",
+    "secondaryText",
+    "border",
+  ];
+  // How well a color fits a role, 0..1 — higher is better.
+  const fit = (hex: string, role: CustomRole): number => {
+    const { l, c } = hexToOklch(hex);
+    switch (role) {
+      case "pageBg":
+        return l; // lightest
+      case "sectionBg":
+        return l * 0.95; // also light, but yields to pageBg
+      case "bodyText":
+        return 1 - l; // darkest
+      case "heading":
+        return (1 - l) * 0.92; // dark, but yields the very darkest to body text
+      case "button":
+        return c * (l > 0.25 && l < 0.78 ? 1 : 0.4); // colorful mid-tone
+      case "accent":
+        return c * 0.85; // colorful, secondary to button
+      case "secondaryText":
+        return (1 - Math.abs(l - 0.5)) * (1 - Math.min(c / 0.1, 1)); // muted mid grey
+      case "border":
+        return 1 - Math.abs(l - 0.7); // light-ish neutral
+    }
+  };
+
+  const result: (CustomRole | null)[] = hexes.map(() => null);
+  const takenRoles = new Set<CustomRole>();
+  const assignedColors = new Set<number>();
+
+  // Greedily fill roles in priority order: each role grabs the best free color.
+  for (const role of ROLE_ORDER) {
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+    hexes.forEach((hex, i) => {
+      if (assignedColors.has(i)) return;
+      const score = fit(hex, role);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    });
+    if (bestIdx >= 0) {
+      result[bestIdx] = role;
+      takenRoles.add(role);
+      assignedColors.add(bestIdx);
+    }
+    if (assignedColors.size === hexes.length) break;
+  }
+
+  // Any leftover colors (more than seven) become accents.
+  return result.map((r) => r ?? "accent");
 }
 
 // Build a palette from colors the user assigns to roles directly. We show ONLY
@@ -311,6 +387,8 @@ export function buildCustomPalette(colors: CustomColor[]): Palette {
   const background = byRole("pageBg") ?? lightest;
   const surface = byRole("sectionBg") ?? background;
   const text = byRole("bodyText") ?? (readableOn(background) === "#ffffff" ? "#ffffff" : darkest);
+  // Headings default to the body ink unless she explicitly assigns a Heading color.
+  const heading = byRole("heading") ?? text;
   const button = byRole("button") ?? byRole("accent") ?? darkest;
   const accent = byRole("accent") ?? button;
 
@@ -334,6 +412,7 @@ export function buildCustomPalette(colors: CustomColor[]): Palette {
       background,
       surface,
       text,
+      heading,
       // Secondary text falls back to a readable softer tone, never an invented hue.
       mutedText:
         byRole("secondaryText") ?? (readableOn(background) === "#ffffff" ? "#cbd5e1" : "#64748b"),

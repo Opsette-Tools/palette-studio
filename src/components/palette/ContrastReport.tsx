@@ -33,6 +33,12 @@ export function ContrastReport({ palette }: { palette: Palette }) {
       note: "Text inside cards and panels.",
     },
     {
+      label: "Heading on card background",
+      fg: palette.roles.heading,
+      bg: palette.roles.surface,
+      note: "Your titles and section headings.",
+    },
+    {
       label: "Muted text on page background",
       fg: palette.roles.mutedText,
       bg: palette.roles.background,

@@ -2,8 +2,8 @@ import { Card, Radio, Select, Typography } from "antd";
 import { useEffect } from "react";
 import { FONT_PAIRS, loadFontPair, type FontPair } from "../../lib/presets";
 import type { Palette } from "../../lib/harmony";
-import { readableOn } from "../../lib/color";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { BrandMockup } from "./BrandMockup";
 
 type Props = {
   palette: Palette;
@@ -21,7 +21,6 @@ type Props = {
  */
 export function LivePreview({ palette, pair, onFontChange }: Props) {
   const isMobile = useIsMobile();
-  const { roles } = palette;
 
   useEffect(() => {
     FONT_PAIRS.forEach(loadFontPair);
@@ -55,118 +54,9 @@ export function LivePreview({ palette, pair, onFontChange }: Props) {
         </Radio.Group>
       )}
 
-      {/* The mock page: page background wraps a section-background card. */}
-      <div
-        style={{
-          background: roles.background,
-          borderRadius: 14,
-          padding: 18,
-          border: `1px solid ${roles.border}`,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: pair.headingFamily,
-            fontWeight: 700,
-            fontSize: 15,
-            color: roles.text,
-            opacity: 0.85,
-            marginBottom: 12,
-          }}
-        >
-          On the page background
-        </div>
-
-        <div
-          style={{
-            background: roles.surface,
-            color: roles.text,
-            borderRadius: 12,
-            padding: 18,
-            border: `1px solid ${roles.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontFamily: pair.headingFamily,
-              fontWeight: 700,
-              fontSize: 24,
-              lineHeight: 1.15,
-              color: palette.primary,
-            }}
-          >
-            Your brand, in context.
-          </div>
-          <div
-            style={{ fontFamily: pair.bodyFamily, fontSize: 14, marginTop: 8, color: roles.text }}
-          >
-            This is your body text on a section background. The heading uses your buttons / CTA
-            color so you can see how the pieces sit together.
-          </div>
-          <div
-            style={{
-              fontFamily: pair.bodyFamily,
-              fontSize: 12.5,
-              marginTop: 6,
-              color: roles.mutedText,
-            }}
-          >
-            Secondary text sits a little quieter than the body.
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 14,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <button
-              style={{
-                background: palette.primary,
-                color: readableOn(palette.primary),
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 14px",
-                fontFamily: pair.bodyFamily,
-                fontWeight: 600,
-                cursor: "default",
-              }}
-            >
-              Buttons / CTA
-            </button>
-            <button
-              style={{
-                background: "transparent",
-                color: palette.primary,
-                border: `1px solid ${palette.primary}`,
-                borderRadius: 8,
-                padding: "8px 14px",
-                fontFamily: pair.bodyFamily,
-                fontWeight: 600,
-                cursor: "default",
-              }}
-            >
-              Secondary
-            </button>
-            <span
-              style={{
-                background: palette.accent,
-                color: readableOn(palette.accent),
-                borderRadius: 999,
-                padding: "4px 10px",
-                fontFamily: pair.bodyFamily,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              Accent badge
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* The mock page — shared with the exported brand kit so the preview and the
+          download show the exact same composition. */}
+      <BrandMockup palette={palette} pair={pair} />
 
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 10, fontSize: 12 }}>
         Heading: {pair.heading} · Body: {pair.body}

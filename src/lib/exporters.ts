@@ -10,6 +10,7 @@ export function toCssVars(p: Palette): string {
     `  --color-background: ${p.roles.background};`,
     `  --color-surface: ${p.roles.surface};`,
     `  --color-text: ${p.roles.text};`,
+    `  --color-heading: ${p.roles.heading};`,
     `  --color-muted: ${p.roles.mutedText};`,
     `  --color-border: ${p.roles.border};`,
   ];
@@ -32,6 +33,7 @@ module.exports = {
         secondary: "${p.secondary}",${p.accent2 ? `\n        accent2: "${p.accent2}",` : ""}
         background: "${p.roles.background}",
         surface: "${p.roles.surface}",
+        heading: "${p.roles.heading}",
       },
     },
   },
@@ -46,6 +48,7 @@ export function toAntd(p: Palette): string {
     colorWarning: "#faad14",
     colorError: "#ff4d4f",
     colorTextBase: p.roles.text,
+    colorTextHeading: p.roles.heading,
     colorBgBase: p.roles.background,
     colorBgContainer: p.roles.surface,
     colorBorder: p.roles.border,

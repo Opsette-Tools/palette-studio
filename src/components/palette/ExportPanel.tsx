@@ -41,6 +41,67 @@ function CopyBlock({ code }: { code: string }) {
   );
 }
 
+// Open the rendered brand kit in a new tab as a preview, with a Download button,
+// instead of pushing the file straight to the user's downloads. She names the kit
+// first (the naming modal), then reviews the image here and downloads when ready.
+// We build a tiny self-contained HTML doc around the PNG data URL — no network,
+// nothing leaves the device.
+function openBrandKitPreview(dataUrl: string, fileName: string, title: string): void {
+  const win = window.open("", "_blank");
+  if (!win) {
+    // Pop-up blocked — fall back to a direct download so the action still works.
+    const link = document.createElement("a");
+    link.download = fileName;
+    link.href = dataUrl;
+    link.click();
+    return;
+  }
+  const safeTitle = title.replace(/[<>&"]/g, (c) =>
+    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] as string,
+  );
+  win.document.write(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${safeTitle} — Brand kit preview</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0; min-height: 100vh; background: #f4f5f4;
+    font-family: "Inter", system-ui, -apple-system, sans-serif; color: #2f4f46;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  header {
+    width: 100%; box-sizing: border-box; position: sticky; top: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 20px; background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px); border-bottom: 1px solid #e6e9e7;
+  }
+  header .label { font-weight: 600; font-size: 15px; }
+  header .hint { font-size: 12px; color: #6b7280; font-weight: 400; }
+  a.btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #2f4f46; color: #fff; text-decoration: none;
+    padding: 9px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    white-space: nowrap;
+  }
+  a.btn:hover { background: #264039; }
+  main { padding: 24px 20px 48px; width: 100%; box-sizing: border-box; display: flex; justify-content: center; }
+  img { max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+</style>
+</head>
+<body>
+  <header>
+    <span class="label">${safeTitle} <span class="hint">— preview, then download when you're happy</span></span>
+    <a class="btn" href="${dataUrl}" download="${fileName}">⬇ Download PNG</a>
+  </header>
+  <main><img src="${dataUrl}" alt="${safeTitle} brand kit" /></main>
+</body>
+</html>`);
+  win.document.close();
+}
+
 // Turn a free-text kit name into a safe, readable file name.
 function toFileSlug(name: string): string {
   const slug = name
@@ -74,17 +135,15 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
     setKitName(name);
     setNaming(false);
     // Let React commit the new name into the off-screen preview before we
-    // snapshot it, so the entered name actually appears on the PNG.
+    // snapshot it, so the entered name actually appears on the image.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     if (!previewRef.current) return;
+    const fileName = `${toFileSlug(name || `palette-${palette.primary.slice(1)}`)}.png`;
     try {
       const url = await toPng(previewRef.current, { pixelRatio: 2, cacheBust: true });
-      const link = document.createElement("a");
-      link.download = `${toFileSlug(name || `palette-${palette.primary.slice(1)}`)}.png`;
-      link.href = url;
-      link.click();
+      openBrandKitPreview(url, fileName, name || "Your brand kit");
     } catch {
-      void message.error("Couldn't generate PNG");
+      void message.error("Couldn't generate the brand kit");
     }
   }
 
@@ -93,7 +152,7 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
       title="6. Export"
       extra={
         <Button type="primary" icon={<DownloadOutlined />} onClick={openNaming}>
-          Download brand kit
+          Preview &amp; download brand kit
         </Button>
       }
     >
@@ -108,7 +167,7 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
       <Modal
         open={naming}
         title="Name your brand kit"
-        okText="Download PNG"
+        okText="Preview brand kit"
         onOk={() => void confirmDownload()}
         onCancel={() => setNaming(false)}
         destroyOnClose
@@ -116,7 +175,7 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
         <Form layout="vertical" style={{ marginTop: 8 }}>
           <Form.Item
             label="Kit name"
-            help="Shown on the brand kit image and used as the file name."
+            help="Shown on the brand kit image and used as the file name. You'll preview it in a new tab, then download when you're happy."
           >
             <Input
               autoFocus

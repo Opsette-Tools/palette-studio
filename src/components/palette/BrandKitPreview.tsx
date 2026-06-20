@@ -2,6 +2,7 @@ import type { Palette } from "../../lib/harmony";
 import { CUSTOM_ROLE_OPTIONS } from "../../lib/harmony";
 import type { FontPair } from "../../lib/presets";
 import { readableOn } from "../../lib/color";
+import { BrandMockup } from "./BrandMockup";
 
 function roleLabel(role: string): string {
   return CUSTOM_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role;
@@ -29,6 +30,7 @@ export function BrandKitPreview({ palette, fontPair, kitName, logoSrc }: Props) 
         { label: "Accent", hex: palette.accent },
         { label: "Page background", hex: palette.roles.background },
         { label: "Card background", hex: palette.roles.surface },
+        { label: "Heading", hex: palette.roles.heading },
         { label: "Body text", hex: palette.roles.text },
       ];
 
@@ -91,11 +93,11 @@ export function BrandKitPreview({ palette, fontPair, kitName, logoSrc }: Props) 
           {isCustom ? "Your colors" : "Color roles"}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-          {roleSwatches.map((s) => {
+          {roleSwatches.map((s, i) => {
             const fg = readableOn(s.hex);
             return (
               <div
-                key={s.label}
+                key={`${s.label}-${i}`}
                 style={{
                   background: s.hex,
                   color: fg,
@@ -149,43 +151,32 @@ export function BrandKitPreview({ palette, fontPair, kitName, logoSrc }: Props) 
         </div>
       ))}
 
-      <div
-        style={{
-          marginTop: "auto",
-          padding: 24,
-          background: palette.roles.surface,
-          borderRadius: 16,
-          border: `1px solid ${palette.roles.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 24,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: fontPair.headingFamily,
-              fontSize: 36,
-              fontWeight: 700,
-              color: palette.primary,
-            }}
-          >
-            The quick brown fox.
-          </div>
-          <div style={{ fontSize: 18, marginTop: 8, color: palette.roles.text }}>
-            Body copy in {fontPair.body}. Built with Palette Studio — part of Opsette Tools.
-          </div>
-        </div>
-        {logoSrc ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-            <img src={logoSrc} alt="" style={{ width: 40, height: 40, objectFit: "contain" }} />
-            <span style={{ fontSize: 22, fontWeight: 700, color: palette.roles.text }}>
-              Opsette
-            </span>
-          </div>
-        ) : null}
+      {/* "In context" — the SAME composed mockup as the on-screen live preview, so
+          the export demonstrates every role (heading, body, muted text, CTA +
+          Secondary buttons, accent badge) instead of a bland sample line. Scaled
+          up for the poster. */}
+      <div style={{ marginTop: "auto" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>In context</div>
+        <BrandMockup palette={palette} pair={fontPair} scale={1.7} />
       </div>
+
+      {/* Opsette maker's mark, bottom-right. */}
+      {logoSrc ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            alignSelf: "flex-end",
+            opacity: 0.85,
+          }}
+        >
+          <img src={logoSrc} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
+          <span style={{ fontSize: 20, fontWeight: 700, color: palette.roles.text }}>
+            Built with Palette Studio · Opsette
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

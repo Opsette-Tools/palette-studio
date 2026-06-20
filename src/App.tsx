@@ -132,119 +132,92 @@ export default function App() {
               </Typography.Paragraph>
             </section>
 
-            {isCustom ? (
-              /* CUSTOM MODE — editor on the left, a sticky live preview on the
-                 right so the result is always visible while she assigns colors.
-                 Palette grid, accessibility, and export run full-width below. */
-              <>
-                <div
-                  className="ps-custom-split"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
-                    gap: 20,
-                    alignItems: "start",
-                    marginBottom: 20,
-                  }}
-                >
-                  <StartCard
-                    value={state.baseHex}
-                    onChange={(hex) => dispatch({ type: "setBase", hex })}
-                    customColors={customColors}
-                    onCustomChange={setCustomColors}
-                  />
-                  <div className="ps-sticky-preview" style={{ position: "sticky", top: 20 }}>
-                    <LivePreview
-                      palette={palette}
+            {/* UNIFIED LAYOUT — every mode uses the same shape so the page never
+                reshuffles when you switch modes:
+                  • Left column: the Start card (mode picker + per-mode controls),
+                    plus the harmony controls in generated modes (they don't apply
+                    to "My own colors").
+                  • Right column: a sticky LivePreview, always visible.
+                  • Full-width below: palette grid, contrast, scales, export.
+                The only per-mode difference is whether the harmony controls and the
+                typography picker appear in the left column — the skeleton is identical. */}
+            <div
+              className="ps-custom-split"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
+                gap: 20,
+                alignItems: "start",
+                marginBottom: 20,
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <StartCard
+                  value={state.baseHex}
+                  onChange={(hex) => dispatch({ type: "setBase", hex })}
+                  customColors={customColors}
+                  onCustomChange={setCustomColors}
+                />
+
+                {!isCustom && (
+                  <>
+                    <HarmonyPicker
+                      value={state.rule}
+                      onChange={(rule) => dispatch({ type: "setRule", rule })}
+                      vibrancy={
+                        <>
+                          <VibrancyPicker
+                            value={state.vibrancy}
+                            onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
+                          />
+                          <TemperaturePicker
+                            value={state.temperature}
+                            onChange={(temperature) =>
+                              dispatch({ type: "setTemperature", temperature })
+                            }
+                          />
+                        </>
+                      }
+                    />
+                    <TypographyPicker
                       pair={fontPair}
-                      onFontChange={(p) => dispatch({ type: "setFont", id: p.id })}
+                      onChange={(p) => dispatch({ type: "setFont", id: p.id })}
+                      palette={palette}
                     />
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                    gap: 20,
-                    alignItems: "start",
-                  }}
-                >
-                  <PaletteGrid palette={palette} />
-                  <ContrastReport palette={palette} />
-                  {/* Scales are derived from her own colors — even tints/shades,
-                      same component and labels as generated mode. */}
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <ScaleStrips
-                      primary={palette.primaryScale}
-                      accent={palette.accentScale}
-                      neutrals={palette.neutrals}
-                    />
-                  </div>
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <ExportPanel palette={palette} fontPair={fontPair} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              /* GENERATED MODE — unchanged two-column flow. */
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: 20,
-                  alignItems: "start",
-                }}
-              >
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <StartCard
-                    value={state.baseHex}
-                    onChange={(hex) => dispatch({ type: "setBase", hex })}
-                    customColors={customColors}
-                    onCustomChange={setCustomColors}
-                  />
-                </div>
-
-                <HarmonyPicker
-                  value={state.rule}
-                  onChange={(rule) => dispatch({ type: "setRule", rule })}
-                  vibrancy={
-                    <>
-                      <VibrancyPicker
-                        value={state.vibrancy}
-                        onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
-                      />
-                      <TemperaturePicker
-                        value={state.temperature}
-                        onChange={(temperature) =>
-                          dispatch({ type: "setTemperature", temperature })
-                        }
-                      />
-                    </>
-                  }
-                />
-                <PaletteGrid palette={palette} />
-
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <ScaleStrips
-                    primary={palette.primaryScale}
-                    accent={palette.accentScale}
-                    neutrals={palette.neutrals}
-                  />
-                </div>
-
-                <ContrastReport palette={palette} />
-                <TypographyPicker
-                  pair={fontPair}
-                  onChange={(p) => dispatch({ type: "setFont", id: p.id })}
-                  palette={palette}
-                />
-
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <ExportPanel palette={palette} fontPair={fontPair} />
-                </div>
+                  </>
+                )}
               </div>
-            )}
+
+              <div className="ps-sticky-preview" style={{ position: "sticky", top: 20 }}>
+                <LivePreview
+                  palette={palette}
+                  pair={fontPair}
+                  onFontChange={(p) => dispatch({ type: "setFont", id: p.id })}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 20,
+                alignItems: "start",
+              }}
+            >
+              <PaletteGrid palette={palette} />
+              <ContrastReport palette={palette} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <ScaleStrips
+                  primary={palette.primaryScale}
+                  accent={palette.accentScale}
+                  neutrals={palette.neutrals}
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <ExportPanel palette={palette} fontPair={fontPair} />
+              </div>
+            </div>
 
             <Typography.Paragraph
               type="secondary"

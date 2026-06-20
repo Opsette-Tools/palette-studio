@@ -1,10 +1,11 @@
 import { Button, ColorPicker, Input, Select, Typography, message } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { normalizeHex } from "../../lib/color";
 import {
   CUSTOM_ROLE_OPTIONS,
   suggestRole,
+  suggestRolesForList,
   type CustomColor,
   type CustomRole,
 } from "../../lib/harmony";
@@ -22,6 +23,13 @@ type Props = {
   onChange: (colors: CustomColor[]) => void;
 };
 
+// A row becomes a CustomColor only once its hex is valid; otherwise it's dropped
+// from what we emit (but stays editable on screen).
+function toCustom(r: Row): CustomColor | null {
+  if (!isValidHex(r.hex)) return null;
+  return { hex: normalizeHex(r.hex), role: r.role, name: r.name.trim() || undefined };
+}
+
 function seedRows(colors: CustomColor[]): Row[] {
   if (colors.length) return colors.map((c) => ({ hex: c.hex, role: c.role, name: c.name ?? "" }));
   return [
@@ -36,14 +44,37 @@ function seedRows(colors: CustomColor[]): Row[] {
  * suggests a sensible role from the color's lightness, which she can override.
  * Only the colors she enters appear downstream — nothing is derived or invented.
  */
+// Compact signature of a CustomColor list, used to tell an external change (e.g.
+// the photo handoff seeding all colors) apart from our own edits echoing back
+// through the parent. Without this the local rows and the emitted list could
+// drift — the on-screen dropdowns showing one set of roles while the export used
+// a stale set (the duplicate/wrong-role bug).
+function signature(colors: CustomColor[]): string {
+  return colors.map((c) => `${normalizeHex(c.hex)}|${c.role}|${c.name ?? ""}`).join(";");
+}
+
 export function CustomPaletteFields({ colors, onChange }: Props) {
   const [rows, setRows] = useState<Row[]>(() => seedRows(colors));
+  // The signature of the list we last emitted upward. When the incoming `colors`
+  // prop differs from this, the change came from OUTSIDE (not our own edit) and
+  // we re-seed the rows so the editor reflects it. When it matches, it's just our
+  // edit round-tripping — we leave the in-progress rows (and any half-typed hex)
+  // untouched.
+  const lastEmitted = useRef<string>(signature(seedRows(colors).map(toCustom).filter(Boolean) as CustomColor[]));
+
+  // Re-seed the rows when the parent hands us a genuinely different color list.
+  useEffect(() => {
+    const incoming = signature(colors);
+    if (incoming !== lastEmitted.current) {
+      lastEmitted.current = incoming;
+      setRows(seedRows(colors));
+    }
+  }, [colors]);
 
   // Push the valid subset up whenever rows change.
   useEffect(() => {
-    const valid: CustomColor[] = rows
-      .filter((r) => isValidHex(r.hex))
-      .map((r) => ({ hex: normalizeHex(r.hex), role: r.role, name: r.name.trim() || undefined }));
+    const valid: CustomColor[] = rows.map(toCustom).filter(Boolean) as CustomColor[];
+    lastEmitted.current = signature(valid);
     onChange(valid);
     // onChange is stable from the parent; depend only on rows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,12 +113,10 @@ export function CustomPaletteFields({ colors, onChange }: Props) {
   function pasteList(text: string): boolean {
     const found = text.match(/#?[0-9a-fA-F]{6}|#?[0-9a-fA-F]{3}\b/g);
     if (!found || found.length < 2) return false;
-    setRows(
-      found.slice(0, 8).map((h, idx) => {
-        const hex = normalizeHex(h);
-        return { hex, role: suggestRole(hex, idx), name: "" };
-      }),
-    );
+    const hexes = found.slice(0, 8).map((h) => normalizeHex(h));
+    // Distinct role per color across the whole pasted set (no duplicate roles).
+    const roles = suggestRolesForList(hexes);
+    setRows(hexes.map((hex, idx) => ({ hex, role: roles[idx], name: "" })));
     return true;
   }
 

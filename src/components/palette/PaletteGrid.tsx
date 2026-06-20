@@ -95,9 +95,14 @@ export function PaletteGrid({ palette }: { palette: Palette }) {
           hint: "Cards and panels that sit on top of the page.",
         },
         {
+          label: "Heading",
+          hex: palette.roles.heading,
+          hint: "Your titles and section headings.",
+        },
+        {
           label: "Body text",
           hex: palette.roles.text,
-          hint: "Your paragraphs and headings.",
+          hint: "Your paragraphs and longer copy.",
         },
         {
           label: "Muted text",

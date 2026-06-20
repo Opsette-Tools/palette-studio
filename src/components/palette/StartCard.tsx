@@ -10,22 +10,31 @@ import {
   Upload,
   message,
 } from "antd";
-import { ThunderboltOutlined, CameraOutlined } from "@ant-design/icons";
+import { ThunderboltOutlined, CameraOutlined, AppstoreOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import type { UploadProps } from "antd";
 import { VIBES } from "../../lib/presets";
 import { normalizeHex } from "../../lib/color";
-import { randomBase, suggestRole, type CustomColor } from "../../lib/harmony";
+import {
+  randomBase,
+  suggestRole,
+  suggestRolesForList,
+  type CustomColor,
+} from "../../lib/harmony";
 import { loadImageFile, extractPalette, sampleColorAt } from "../../lib/image-colors";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { CustomPaletteFields } from "./CustomPaletteFields";
 
+// Order matters: the generated modes (color / vibe / surprise) share the same
+// left-column layout, so they sit together. "From a photo" and "My own colors"
+// come last because they swap the left column's contents — keeping them at the
+// end means the layout settles as you move left-to-right instead of jumping back.
 const MODE_OPTIONS = [
   { label: "Pick a color", value: "color" },
   { label: "Pick a vibe", value: "vibe" },
+  { label: "Surprise me", value: "surprise" },
   { label: "From a photo", value: "photo" },
   { label: "My own colors", value: "custom" },
-  { label: "Surprise me", value: "surprise" },
 ] as const;
 
 type Props = {
@@ -101,6 +110,24 @@ export function StartCard({ value, onChange, customColors, onCustomChange }: Pro
       setHexInput(hex);
       onChange(hex);
     }
+  }
+
+  // Path 2 from a photo: take every color we found and make it the palette.
+  // We assign each a smart starting role (lightest → backgrounds, darkest → text,
+  // colorful mid-tones → buttons/accent) so the brand kit is sensible out of the
+  // gate; she can still rename or reassign in the editor before exporting.
+  function useAllPhotoColors() {
+    const hexes = swatches.map((h) => normalizeHex(h));
+    // Assign a DISTINCT role to each color across the whole set, so we never seed
+    // two "Muted text" rows from similar colors.
+    const roles = suggestRolesForList(hexes);
+    const seeded: CustomColor[] = hexes.map((hex, idx) => ({
+      hex,
+      role: roles[idx],
+      name: "",
+    }));
+    onCustomChange(seeded);
+    setMode("custom");
   }
 
   const customMode = mode === "custom";
@@ -335,6 +362,24 @@ export function StartCard({ value, onChange, customColors, onCustomChange }: Pro
                       );
                     })}
                   </Space>
+                )}
+
+                {/* The two paths from a photo:
+                    1. Tap one swatch / the photo → that single color drives the
+                       generated palette + harmony play (handled above).
+                    2. "Use all these colors" → all the colors we found become the
+                       palette directly, ready to export as a brand kit. We seed the
+                       My-own-colors editor (with smart roles) and switch into custom
+                       mode, so she can rename / reassign before exporting. */}
+                {swatches.length > 0 && (
+                  <Button
+                    type="primary"
+                    icon={<AppstoreOutlined />}
+                    block
+                    onClick={useAllPhotoColors}
+                  >
+                    Use all these colors as my palette
+                  </Button>
                 )}
 
                 <Button
