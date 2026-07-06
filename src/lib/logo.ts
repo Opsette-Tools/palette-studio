@@ -8,7 +8,11 @@
 // in memory, so it always paints.
 
 const base = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "/");
-const LOGO_URL = `${base}opsette-logo.png`;
+// Use the export-optimized logo (~320px tall, ~12KB) rather than the full-res
+// 3140px app logo (~435KB). The brand kit renders the logo at most 88px, so a
+// 320px source is retina-crisp while keeping the inlined data URL — and any
+// downloaded artifact that carries it — light instead of dragging the full image.
+const LOGO_URL = `${base}opsette-logo-export.png`;
 
 let cached: string | null = null;
 let inflight: Promise<string> | null = null;
