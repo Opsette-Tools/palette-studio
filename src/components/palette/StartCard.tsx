@@ -8,9 +8,15 @@ import {
   Typography,
   Space,
   Upload,
+  Modal,
   message,
 } from "antd";
-import { ThunderboltOutlined, CameraOutlined, AppstoreOutlined } from "@ant-design/icons";
+import {
+  ThunderboltOutlined,
+  CameraOutlined,
+  AppstoreOutlined,
+  FolderOpenOutlined,
+} from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import type { UploadProps } from "antd";
 import { VIBES } from "../../lib/presets";
@@ -44,13 +50,31 @@ type Props = {
   customColors: CustomColor[];
   /** Fired when the custom color list changes; empty array → leave custom mode. */
   onCustomChange: (colors: CustomColor[]) => void;
+  /** Reopen a saved palette from a pasted Brand Kit blob. Returns which kind of
+   *  palette was restored (so we can sync this card's mode), or null if invalid. */
+  onReopen: (raw: string) => "generated" | "custom" | null;
 };
 type Mode = "color" | "vibe" | "photo" | "custom" | "surprise";
 
-export function StartCard({ value, onChange, customColors, onCustomChange }: Props) {
+export function StartCard({ value, onChange, customColors, onCustomChange, onReopen }: Props) {
   const isMobile = useIsMobile();
   const [mode, setMode] = useState<Mode>("color");
   const [hexInput, setHexInput] = useState(value);
+
+  // Reopen-a-saved-palette state (the paste-your-own-blob path from the interop
+  // contract — revising a client without a backend).
+  const [reopening, setReopening] = useState(false);
+  const [pasteBlob, setPasteBlob] = useState("");
+
+  function confirmReopen() {
+    const result = onReopen(pasteBlob);
+    if (!result) return; // App already surfaced the error; keep the modal open to retry.
+    // Sync this card's local mode to match what was restored, so the right
+    // controls show (custom fields vs. the generated color picker).
+    setMode(result === "custom" ? "custom" : "color");
+    setReopening(false);
+    setPasteBlob("");
+  }
 
   // Keep the always-visible hex field in sync when the color is set from any
   // mode (vibe, photo swatch/eyedropper, surprise) — not just by typing here.
@@ -133,7 +157,20 @@ export function StartCard({ value, onChange, customColors, onCustomChange }: Pro
   const customMode = mode === "custom";
 
   return (
-    <Card title="1. Start with a color">
+    <Card
+      title="1. Start with a color"
+      extra={
+        <Button
+          type="link"
+          size="small"
+          icon={<FolderOpenOutlined />}
+          onClick={() => setReopening(true)}
+          style={{ paddingRight: 0 }}
+        >
+          Reopen a saved palette
+        </Button>
+      }
+    >
       {/* Always-visible color control — the single source of truth, usable from
           every generated mode. The swatch IS the visual color picker; the hex
           field edits it by text. Hidden in "My own colors" mode, where the user
@@ -416,6 +453,32 @@ export function StartCard({ value, onChange, customColors, onCustomChange }: Pro
           </Space>
         )}
       </div>
+
+      <Modal
+        open={reopening}
+        title="Reopen a saved palette"
+        okText="Reopen palette"
+        okButtonProps={{ disabled: !pasteBlob.trim() }}
+        onOk={confirmReopen}
+        onCancel={() => {
+          setReopening(false);
+          setPasteBlob("");
+        }}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+          Paste the palette code you exported earlier (the "Export to Brand Board" button copies
+          it). This reloads every color, role, and font so you can tweak and re-export — handy when
+          a client comes back for a revision.
+        </Typography.Paragraph>
+        <Input.TextArea
+          value={pasteBlob}
+          onChange={(e) => setPasteBlob(e.target.value)}
+          placeholder='{"type":"palette","v":1,"source":"opsette", ...}'
+          autoSize={{ minRows: 4, maxRows: 8 }}
+          style={{ fontFamily: "monospace", fontSize: 12 }}
+        />
+      </Modal>
     </Card>
   );
 }

@@ -1,4 +1,5 @@
-import type { Palette } from "./harmony";
+import type { Palette, HarmonyRule, Vibrancy, Temperature, CustomColor } from "./harmony";
+import type { FontPair } from "./presets";
 
 export function toCssVars(p: Palette): string {
   const lines = [
@@ -62,4 +63,107 @@ const theme = {
 };
 
 <ConfigProvider theme={theme}>{/* your app */}</ConfigProvider>`;
+}
+
+// ── Brand Kit interop (see docs/BRAND-KIT-INTEROP-CONTRACT.md) ───────────────
+// The shared clipboard shape Brand Board (and this app's own reopen path)
+// consume. Palette Studio is the "build first" source: this is the `palette`
+// payload. Version + type + source let the consumer route/validate a pasted blob.
+
+export type PalettePayload = {
+  type: "palette";
+  v: 1;
+  source: "opsette";
+  data: {
+    kitName: string;
+    base: string;
+    rule: HarmonyRule;
+    vibrancy: Vibrancy;
+    temperature: Temperature;
+    primary: string;
+    secondary: string;
+    accent: string;
+    accent2?: string;
+    roles: {
+      background: string;
+      surface: string;
+      text: string;
+      heading: string;
+      mutedText: string;
+      border: string;
+    };
+    scales: {
+      primary: Record<string, string>;
+      accent: Record<string, string>;
+      neutral: Record<string, string>;
+    };
+    // Only present in "My own colors" mode — the user's exact colors + roles.
+    custom?: CustomColor[];
+    font: {
+      id: string;
+      heading: string;
+      body: string;
+      googleHref: string;
+    };
+  };
+};
+
+// Serialize the current palette + fonts into the shared Brand Kit shape. All the
+// data already exists at the ExportPanel boundary — this is a pure mapping, no
+// model changes. `custom` is carried only for "My own colors" palettes so the
+// reopen path can rebuild the exact user-supplied colors.
+export function toKitJson(p: Palette, font: FontPair, kitName: string): PalettePayload {
+  return {
+    type: "palette",
+    v: 1,
+    source: "opsette",
+    data: {
+      kitName,
+      base: p.base,
+      rule: p.rule,
+      vibrancy: p.vibrancy,
+      temperature: p.temperature,
+      primary: p.primary,
+      secondary: p.secondary,
+      accent: p.accent,
+      ...(p.accent2 ? { accent2: p.accent2 } : {}),
+      roles: { ...p.roles },
+      scales: {
+        primary: { ...p.primaryScale },
+        accent: { ...p.accentScale },
+        neutral: { ...p.neutrals },
+      },
+      ...(p.custom ? { custom: p.custom } : {}),
+      font: {
+        id: font.id,
+        heading: font.heading,
+        body: font.body,
+        googleHref: font.googleHref,
+      },
+    },
+  };
+}
+
+// Parse a pasted blob back into a palette payload — used by the reopen path.
+// Returns null (never throws) for anything that isn't a valid Opsette palette
+// blob, so the caller can show a friendly "that's not a palette" message. This
+// is deliberately strict on the envelope (type/v/source) and lenient on the
+// interior: we only read the fields the reopen path actually restores.
+export function fromKitJson(raw: string): PalettePayload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const p = parsed as Record<string, unknown>;
+  if (p.type !== "palette" || p.v !== 1 || p.source !== "opsette") return null;
+  const data = p.data;
+  if (typeof data !== "object" || data === null) return null;
+  const d = data as Record<string, unknown>;
+  // Minimum viable payload for a reopen: a base hex + a rule. Custom palettes
+  // additionally carry `custom`, which the caller checks for.
+  if (typeof d.base !== "string" || typeof d.rule !== "string") return null;
+  return parsed as PalettePayload;
 }

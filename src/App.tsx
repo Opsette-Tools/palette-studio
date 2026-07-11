@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
-import { ConfigProvider, App as AntdApp, Typography } from "antd";
+import { ConfigProvider, App as AntdApp, Typography, message as staticMessage } from "antd";
 import { OpsetteHeader } from "./components/opsette-header";
 import { OpsetteFooterLogo } from "./components/opsette-share";
 import { StartCard } from "./components/palette/StartCard";
@@ -9,7 +9,6 @@ import { TemperaturePicker } from "./components/palette/TemperaturePicker";
 import { PaletteGrid } from "./components/palette/PaletteGrid";
 import { ScaleStrips } from "./components/palette/ScaleStrips";
 import { ContrastReport } from "./components/palette/ContrastReport";
-import { TypographyPicker } from "./components/palette/TypographyPicker";
 import { LivePreview } from "./components/palette/LivePreview";
 import { ExportPanel } from "./components/palette/ExportPanel";
 import {
@@ -21,6 +20,7 @@ import {
   type CustomColor,
 } from "./lib/harmony";
 import { FONT_PAIRS, loadFontPair } from "./lib/presets";
+import { fromKitJson } from "./lib/exporters";
 import { loadSaved, saveState } from "./lib/storage";
 
 type State = {
@@ -88,6 +88,42 @@ export default function App() {
   useEffect(() => {
     loadFontPair(fontPair);
   }, [fontPair]);
+
+  // Reopen a saved palette: parse a pasted Brand Kit blob and restore the INPUTS
+  // that produced it (base/rule/vibrancy/temperature + font, or the custom color
+  // list) — never the derived palette itself. Restoring inputs makes the round
+  // trip lossless: buildPalette / buildCustomPalette rebuild the exact same
+  // result, and every control reflects the reopened state.
+  function reopenFromPaste(raw: string): "generated" | "custom" | null {
+    const payload = fromKitJson(raw);
+    if (!payload) {
+      void staticMessage.error("That doesn't look like a saved Opsette palette.");
+      return null;
+    }
+    const d = payload.data;
+    const isCustomPayload = Boolean(d.custom && d.custom.length > 0);
+    if (isCustomPayload && d.custom) {
+      // "My own colors" palette — restore the exact user-supplied colors.
+      setCustomColors(d.custom);
+    } else {
+      // Generated palette — restore the harmony inputs and leave custom mode.
+      setCustomColors([]);
+      dispatch({
+        type: "hydrate",
+        state: {
+          baseHex: d.base,
+          rule: d.rule,
+          vibrancy: d.vibrancy,
+          temperature: d.temperature,
+          fontPairId: FONT_PAIRS.some((f) => f.id === d.font.id) ? d.font.id : INITIAL.fontPairId,
+        },
+      });
+    }
+    void staticMessage.success(
+      d.kitName ? `Reopened "${d.kitName}"` : "Palette reopened — pick up where you left off.",
+    );
+    return isCustomPayload ? "custom" : "generated";
+  }
 
   const palette = useMemo(
     () =>
@@ -157,34 +193,28 @@ export default function App() {
                   onChange={(hex) => dispatch({ type: "setBase", hex })}
                   customColors={customColors}
                   onCustomChange={setCustomColors}
+                  onReopen={reopenFromPaste}
                 />
 
                 {!isCustom && (
-                  <>
-                    <HarmonyPicker
-                      value={state.rule}
-                      onChange={(rule) => dispatch({ type: "setRule", rule })}
-                      vibrancy={
-                        <>
-                          <VibrancyPicker
-                            value={state.vibrancy}
-                            onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
-                          />
-                          <TemperaturePicker
-                            value={state.temperature}
-                            onChange={(temperature) =>
-                              dispatch({ type: "setTemperature", temperature })
-                            }
-                          />
-                        </>
-                      }
-                    />
-                    <TypographyPicker
-                      pair={fontPair}
-                      onChange={(p) => dispatch({ type: "setFont", id: p.id })}
-                      palette={palette}
-                    />
-                  </>
+                  <HarmonyPicker
+                    value={state.rule}
+                    onChange={(rule) => dispatch({ type: "setRule", rule })}
+                    vibrancy={
+                      <>
+                        <VibrancyPicker
+                          value={state.vibrancy}
+                          onChange={(vibrancy) => dispatch({ type: "setVibrancy", vibrancy })}
+                        />
+                        <TemperaturePicker
+                          value={state.temperature}
+                          onChange={(temperature) =>
+                            dispatch({ type: "setTemperature", temperature })
+                          }
+                        />
+                      </>
+                    }
+                  />
                 )}
               </div>
 
