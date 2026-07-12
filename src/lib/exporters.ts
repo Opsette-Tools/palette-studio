@@ -105,6 +105,14 @@ export type PalettePayload = {
       body: string;
       googleHref: string;
     };
+    // ── Baked renders (added 2026-07-12) ────────────────────────────────────
+    // The rendered palette sheet as a PNG data URL, and a copyable-hex PDF as a
+    // PDF data URL, baked into the blob so the whole kit flows Palette Studio →
+    // Brand Board → File Builder with NO manual downloads (mirrors how Icon Kit's
+    // social blob bakes its PNGs, and QR/Card carry `data.image`). Optional so
+    // older blobs — and a "copy colors only" path — still validate.
+    image?: string; // data:image/png;base64,...  (the palette swatch sheet)
+    pdf?: string;   // data:application/pdf;base64,...  (selectable hex codes)
   };
 };
 
@@ -112,7 +120,15 @@ export type PalettePayload = {
 // data already exists at the ExportPanel boundary — this is a pure mapping, no
 // model changes. `custom` is carried only for "My own colors" palettes so the
 // reopen path can rebuild the exact user-supplied colors.
-export function toKitJson(p: Palette, font: FontPair, kitName: string): PalettePayload {
+// `renders` carries the baked PNG (palette sheet) and PDF (copyable hex) data
+// URLs. Optional: the color data alone is a complete, valid payload, so a caller
+// that hasn't produced the renders yet can still export the numbers.
+export function toKitJson(
+  p: Palette,
+  font: FontPair,
+  kitName: string,
+  renders?: { image?: string; pdf?: string },
+): PalettePayload {
   return {
     type: "palette",
     v: 1,
@@ -140,6 +156,8 @@ export function toKitJson(p: Palette, font: FontPair, kitName: string): PaletteP
         body: font.body,
         googleHref: font.googleHref,
       },
+      ...(renders?.image ? { image: renders.image } : {}),
+      ...(renders?.pdf ? { pdf: renders.pdf } : {}),
     },
   };
 }
