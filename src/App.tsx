@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ConfigProvider, App as AntdApp, Typography, message as staticMessage } from "antd";
 import { OpsetteHeader } from "./components/opsette-header";
 import { OpsetteFooterLogo } from "./components/opsette-share";
@@ -10,7 +10,7 @@ import { PaletteGrid } from "./components/palette/PaletteGrid";
 import { ScaleStrips } from "./components/palette/ScaleStrips";
 import { ContrastReport } from "./components/palette/ContrastReport";
 import { LivePreview } from "./components/palette/LivePreview";
-import { ExportPanel } from "./components/palette/ExportPanel";
+import { ExportPanel, type BuildKitBlob } from "./components/palette/ExportPanel";
 import {
   buildPalette,
   buildCustomPalette,
@@ -22,8 +22,16 @@ import {
 import { FONT_PAIRS, loadFontPair } from "./lib/presets";
 import { fromKitJson } from "./lib/exporters";
 import { loadSaved, saveState } from "./lib/storage";
-import { readSeedFromUrl, clearLinkParams } from "./lib/opsette-kit-link";
+import {
+  readSeedFromUrl,
+  clearLinkParams,
+  isEmbedded,
+  isTrustedEmbedMessage,
+  embedSave,
+  OPSETTE_TOOLS_ORIGIN,
+} from "./lib/opsette-kit-link";
 import { seedToState } from "./lib/seed";
+import { EmbedSaveBar } from "./components/palette/EmbedSaveBar";
 
 type State = {
   baseHex: string;
@@ -73,12 +81,35 @@ export default function App() {
   const [customColors, setCustomColors] = useState<CustomColor[]>([]);
   const isCustom = customColors.length > 0;
 
+  // ── Mechanism 3: running inside a Brand Board iframe ──────────────────────
+  // When embedded (?embed=1) we hide the app's own chrome (header/footer/intro)
+  // so the drawer reads as one surface, listen for the parent's `load` blob, and
+  // offer a "Save to Brand Board" bar that posts the revised blob back up. In dev
+  // the parent is on localhost, so its origin is added to the trust list.
+  const embedded = useMemo(() => isEmbedded(), []);
+  const trustedParentOrigins = useMemo(
+    () => (import.meta.env.DEV ? [window.location.origin, "http://localhost:8124"] : []),
+    [],
+  );
+  // The freshest blob-builder, published up by ExportPanel. Held in a ref so the
+  // save handler always bakes current palette state without re-subscribing.
+  const buildBlobRef = useRef<BuildKitBlob | null>(null);
+  const [saving, setSaving] = useState(false);
+  // The kit name carried in on the loaded blob, so a save round-trips it back
+  // instead of relabeling the client's palette "Untitled". Only set in embed
+  // mode (the standalone app collects the name in the export modal instead).
+  const [embedKitName, setEmbedKitName] = useState<string>("");
+
   useEffect(() => {
     // A ?seed= brand core (Mechanism 1) wins over the last-saved palette: when
     // you arrive from the "New client kit" starter, the tool should open on the
     // CLIENT's brand color/font, not whatever you built last. A partial seed
     // merges onto the defaults so unset facts stay sensible. No seed → restore
     // the saved palette exactly as before (behavior unchanged without a seed).
+    // Embedded in Brand Board (Mechanism 3): the parent will post the palette to
+    // load, so don't seed from the URL or restore this device's last palette —
+    // either would flash the wrong palette before the parent's blob arrives.
+    if (embedded) return;
     const core = readSeedFromUrl();
     const seeded = core ? seedToState(core) : null;
     if (seeded) {
@@ -88,11 +119,14 @@ export default function App() {
     }
     const saved = loadSaved();
     if (saved) dispatch({ type: "hydrate", state: saved });
-  }, []);
+  }, [embedded]);
 
   useEffect(() => {
+    // Don't persist while embedded — editing a client's palette in the Brand
+    // Board drawer must not overwrite this device's own standalone palette.
+    if (embedded) return;
     saveState(state);
-  }, [state]);
+  }, [state, embedded]);
 
   const fontPair = useMemo(
     () => FONT_PAIRS.find((f) => f.id === state.fontPairId) ?? FONT_PAIRS[0],
@@ -115,6 +149,7 @@ export default function App() {
       return null;
     }
     const d = payload.data;
+    if (typeof d.kitName === "string") setEmbedKitName(d.kitName);
     const isCustomPayload = Boolean(d.custom && d.custom.length > 0);
     if (isCustomPayload && d.custom) {
       // "My own colors" palette — restore the exact user-supplied colors.
@@ -137,6 +172,57 @@ export default function App() {
       d.kitName ? `Reopened "${d.kitName}"` : "Palette reopened — pick up where you left off.",
     );
     return isCustomPayload ? "custom" : "generated";
+  }
+
+  // ── Mechanism 3 inbound: the parent hands us the current palette blob ──────
+  // Brand Board posts a `load` message once the iframe is ready. A non-null
+  // payload is an existing palette to revise (run the same reopen path the paste
+  // box uses); a null payload means "fresh canvas" — leave the defaults. Only
+  // trusted origins are honored (isTrustedEmbedMessage checks event.origin).
+  useEffect(() => {
+    if (!embedded) return;
+    const onMessage = (event: MessageEvent) => {
+      if (!isTrustedEmbedMessage(event, trustedParentOrigins)) return;
+      const msg = event.data;
+      if (msg.kind === "load" && typeof msg.payload === "string") {
+        reopenFromPaste(msg.payload);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    // Tell the parent we're mounted and ready to receive the load blob. Some
+    // parents wait for the iframe's own signal rather than racing `onload`.
+    window.parent.postMessage(
+      { source: "opsette-embed", kind: "ready" },
+      "*",
+    );
+    return () => window.removeEventListener("message", onMessage);
+    // reopenFromPaste is stable enough for this one-time listener; re-subscribing
+    // on every palette change would churn the listener needlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, trustedParentOrigins]);
+
+  // ── Mechanism 3 outbound: post the revised blob back to Brand Board ────────
+  // Bake the current palette into the same blob "Export to Brand Board" produces,
+  // then postMessage it up. The parent re-ingests it (with a confirm) into the
+  // right slot. Targeted at the apex origin in production, the dev parent origin
+  // locally — never "*", so a revised blob can't leak to an untrusted frame host.
+  async function saveToBrandBoard() {
+    const build = buildBlobRef.current;
+    if (!build) return;
+    setSaving(true);
+    try {
+      // Round-trip the client's kit name (carried in on load) so the revised
+      // palette lands back in Brand Board still labeled for that client.
+      const name = embedKitName.trim() || "Untitled palette";
+      const json = await build(name);
+      const targetOrigin = import.meta.env.DEV ? "*" : OPSETTE_TOOLS_ORIGIN;
+      window.parent.postMessage(embedSave(json), targetOrigin);
+      void staticMessage.success("Updated in Brand Board");
+    } catch {
+      void staticMessage.error("Couldn't send the palette back — try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const palette = useMemo(
@@ -167,20 +253,33 @@ export default function App() {
     >
       <AntdApp>
         <div style={{ minHeight: "100dvh", background: "#fafafa" }}>
-          <OpsetteHeader />
+          {/* Embed mode (Mechanism 3): the app's own header/footer/intro are
+              hidden so the drawer reads as one surface; a slim save bar takes
+              the header's place. Standalone: the full chrome as always. */}
+          {embedded ? (
+            <EmbedSaveBar onSave={() => void saveToBrandBoard()} saving={saving} />
+          ) : (
+            <OpsetteHeader />
+          )}
           <main
             className="ps-layout"
-            style={{ maxWidth: 1320, margin: "0 auto", padding: "20px 24px 64px" }}
+            style={{
+              maxWidth: 1320,
+              margin: "0 auto",
+              padding: embedded ? "16px 20px 64px" : "20px 24px 64px",
+            }}
           >
-            <section style={{ marginBottom: 16 }}>
-              <Typography.Title level={2} style={{ margin: 0, fontSize: 24, color: "#2f4f46" }}>
-                Build a palette you'll trust.
-              </Typography.Title>
-              <Typography.Paragraph type="secondary" style={{ marginTop: 6, marginBottom: 0 }}>
-                Pick a color or a vibe, choose a harmony rule, and we'll handle the rest — roles,
-                accessible contrast, and matching fonts.
-              </Typography.Paragraph>
-            </section>
+            {!embedded && (
+              <section style={{ marginBottom: 16 }}>
+                <Typography.Title level={2} style={{ margin: 0, fontSize: 24, color: "#2f4f46" }}>
+                  Build a palette you'll trust.
+                </Typography.Title>
+                <Typography.Paragraph type="secondary" style={{ marginTop: 6, marginBottom: 0 }}>
+                  Pick a color or a vibe, choose a harmony rule, and we'll handle the rest — roles,
+                  accessible contrast, and matching fonts.
+                </Typography.Paragraph>
+              </section>
+            )}
 
             {/* UNIFIED LAYOUT — every mode uses the same shape so the page never
                 reshuffles when you switch modes:
@@ -259,18 +358,29 @@ export default function App() {
                 />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <ExportPanel palette={palette} fontPair={fontPair} />
+                <ExportPanel
+                  palette={palette}
+                  fontPair={fontPair}
+                  onBuildBlobReady={(build) => {
+                    buildBlobRef.current = build;
+                  }}
+                />
               </div>
             </div>
 
-            <Typography.Paragraph
-              type="secondary"
-              style={{ textAlign: "center", fontSize: 12, marginTop: 24 }}
-            >
-              Palette Studio is part of Opsette Tools · Your last palette is saved on this device.
-            </Typography.Paragraph>
+            {!embedded && (
+              <>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ textAlign: "center", fontSize: 12, marginTop: 24 }}
+                >
+                  Palette Studio is part of Opsette Tools · Your last palette is saved on this
+                  device.
+                </Typography.Paragraph>
 
-            <OpsetteFooterLogo />
+                <OpsetteFooterLogo />
+              </>
+            )}
           </main>
         </div>
       </AntdApp>

@@ -2,7 +2,7 @@ import { Card, Tabs, Button, Input, Modal, Form, Space, Grid, Typography, messag
 
 const { Text } = Typography;
 import { CopyOutlined, DownloadOutlined, ExportOutlined, FilePdfOutlined } from "@ant-design/icons";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import type { Palette } from "../../lib/harmony";
 import { CUSTOM_ROLE_OPTIONS } from "../../lib/harmony";
@@ -92,7 +92,23 @@ function toFileSlug(name: string): string {
   return slug || "brand-kit";
 }
 
-export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair: FontPair }) {
+// The full baked Brand Kit blob (palette + fonts + PNG + PDF) as a serialized
+// string — exactly what "Export to Brand Board" copies to the clipboard. Lifted
+// out so the embed (Mechanism 3) save path can emit a byte-identical blob up to
+// Brand Board via postMessage, instead of duplicating the html-to-image/PDF bake.
+export type BuildKitBlob = (kitName: string) => Promise<string>;
+
+export function ExportPanel({
+  palette,
+  fontPair,
+  onBuildBlobReady,
+}: {
+  palette: Palette;
+  fontPair: FontPair;
+  // Handed the current blob-builder whenever the palette/fonts change, so an
+  // embedding parent can request the freshest baked blob at save time.
+  onBuildBlobReady?: (build: BuildKitBlob) => void;
+}) {
   const screens = Grid.useBreakpoint();
   const isNarrow = !screens.md; // stack name + preview on phones/small tablets
   // The live preview node IS the download source — snapshotting this exact node
@@ -116,14 +132,13 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
     void loadOpsetteLogo().then(setLogoSrc);
   }, []);
 
-  // Export to Brand Board: serialize the palette + fonts AND bake the rendered
-  // PNG (the swatch sheet) + a copyable-hex PDF into the shared kit JSON, then
-  // copy it to the clipboard. Now the whole kit flows Palette Studio → Brand
-  // Board → File Builder with no manual downloads (mirrors Icon Kit's blob).
-  async function exportToBrandBoard() {
-    setExporting(true);
-    try {
-      const name = kitName.trim() || "Untitled palette";
+  // Build the full baked Brand Kit blob: serialize the palette + fonts AND bake
+  // the rendered PNG (the swatch sheet) + a copyable-hex PDF into the shared kit
+  // JSON. This is the ONE place the blob is assembled — both the clipboard export
+  // and the embed (postMessage) save go through it, so they stay byte-identical.
+  // Baking failures degrade gracefully to a numbers-only (still valid) payload.
+  const buildKitBlob = useCallback<BuildKitBlob>(
+    async (name: string) => {
       let image: string | undefined;
       let pdf: string | undefined;
       // Bake the PNG from the off-screen node (exists whether or not the modal is
@@ -141,9 +156,30 @@ export function ExportPanel({ palette, fontPair }: { palette: Palette; fontPair:
       } catch {
         pdf = undefined;
       }
-      const payload = toKitJson(palette, fontPair, name, { image, pdf });
-      await navigator.clipboard.writeText(JSON.stringify(payload));
-      const baked = [image ? "PNG" : null, pdf ? "PDF" : null].filter(Boolean).join(" + ");
+      return JSON.stringify(toKitJson(palette, fontPair, name, { image, pdf }));
+    },
+    [palette, fontPair],
+  );
+
+  // Publish the freshest blob-builder to an embedding parent whenever the palette
+  // or fonts change, so an in-Brand-Board save (Mechanism 3) bakes current state.
+  useEffect(() => {
+    onBuildBlobReady?.(buildKitBlob);
+  }, [buildKitBlob, onBuildBlobReady]);
+
+  // Export to Brand Board: build the baked blob, then copy it to the clipboard.
+  // The whole kit flows Palette Studio → Brand Board → File Builder with no manual
+  // downloads (mirrors Icon Kit's blob).
+  async function exportToBrandBoard() {
+    setExporting(true);
+    try {
+      const name = kitName.trim() || "Untitled palette";
+      const json = await buildKitBlob(name);
+      await navigator.clipboard.writeText(json);
+      const payload = JSON.parse(json) as { data?: { image?: string; pdf?: string } };
+      const baked = [payload.data?.image ? "PNG" : null, payload.data?.pdf ? "PDF" : null]
+        .filter(Boolean)
+        .join(" + ");
       void message.success(
         baked
           ? `Palette copied with ${baked} — paste it into Brand Board`
