@@ -22,6 +22,8 @@ import {
 import { FONT_PAIRS, loadFontPair } from "./lib/presets";
 import { fromKitJson } from "./lib/exporters";
 import { loadSaved, saveState } from "./lib/storage";
+import { readSeedFromUrl, clearLinkParams } from "./lib/opsette-kit-link";
+import { seedToState } from "./lib/seed";
 
 type State = {
   baseHex: string;
@@ -72,6 +74,18 @@ export default function App() {
   const isCustom = customColors.length > 0;
 
   useEffect(() => {
+    // A ?seed= brand core (Mechanism 1) wins over the last-saved palette: when
+    // you arrive from the "New client kit" starter, the tool should open on the
+    // CLIENT's brand color/font, not whatever you built last. A partial seed
+    // merges onto the defaults so unset facts stay sensible. No seed → restore
+    // the saved palette exactly as before (behavior unchanged without a seed).
+    const core = readSeedFromUrl();
+    const seeded = core ? seedToState(core) : null;
+    if (seeded) {
+      dispatch({ type: "hydrate", state: { ...INITIAL, ...seeded } });
+      clearLinkParams();
+      return;
+    }
     const saved = loadSaved();
     if (saved) dispatch({ type: "hydrate", state: saved });
   }, []);
