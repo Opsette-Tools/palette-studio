@@ -5,6 +5,7 @@ import {
   buildNeutralRamp,
   normalizeHex,
   readableOn,
+  contrastRatio,
   type Scale,
 } from "./color";
 import {
@@ -293,9 +294,19 @@ export function suggestRole(hex: string, index: number): CustomRole {
 // DISTINCT role — used when we auto-seed from a photo or a pasted hex list.
 // suggestRole() alone judges each color in isolation, so two similar colors can
 // both land on (say) "Muted text", producing duplicate roles and a confusing kit.
-// Here we score every color for every still-unclaimed role and hand each color
-// the best role no one better-suited has already taken. Extra colors beyond the
-// seven named roles fall back to "Accent" (the one role that's fine to repeat).
+//
+// Two stages:
+//   1. ASSIGN by fit — score every color for every still-unclaimed role, hand
+//      each color the best role no one better-suited has already taken.
+//   2. REPAIR by contrast — the assignment above is readability-BLIND, so it
+//      happily pairs dark text with a mid-grey card (the Providence-logo bug:
+//      body-on-card failed at 2.75:1). Here we check the pairs that actually
+//      matter and, when one fails, RESHUFFLE the real logo colors to fix it —
+//      never inventing or dropping a color. The classic fix, and the one the
+//      user asked for: if the logo has only one workable light surface, let the
+//      card reuse the page background and push the leftover grey to a role it
+//      passes in (muted text / border). Every original hex survives; nothing is
+//      derived. Extra colors beyond the named roles fall back to "Accent".
 export function suggestRolesForList(hexes: string[]): CustomRole[] {
   // Priority order we want to fill, best-anchored roles first.
   const ROLE_ORDER: CustomRole[] = [
@@ -332,10 +343,9 @@ export function suggestRolesForList(hexes: string[]): CustomRole[] {
   };
 
   const result: (CustomRole | null)[] = hexes.map(() => null);
-  const takenRoles = new Set<CustomRole>();
   const assignedColors = new Set<number>();
 
-  // Greedily fill roles in priority order: each role grabs the best free color.
+  // Stage 1 — greedily fill roles in priority order: each role grabs the best free color.
   for (const role of ROLE_ORDER) {
     let bestIdx = -1;
     let bestScore = -Infinity;
@@ -349,14 +359,100 @@ export function suggestRolesForList(hexes: string[]): CustomRole[] {
     });
     if (bestIdx >= 0) {
       result[bestIdx] = role;
-      takenRoles.add(role);
       assignedColors.add(bestIdx);
     }
     if (assignedColors.size === hexes.length) break;
   }
 
-  // Any leftover colors (more than seven) become accents.
-  return result.map((r) => r ?? "accent");
+  // Any leftover colors (more than the named roles) become accents.
+  const roles = result.map((r) => r ?? "accent");
+
+  // Stage 2 — contrast repair. Reshuffle only; never invent or drop a color.
+  return repairRolesForContrast(hexes, roles);
+}
+
+// Minimum WCAG contrast for a text-on-surface pair to count as "readable" here.
+// 4.5:1 is AA for normal body copy — the bar the accessibility panel checks.
+const MIN_TEXT_CONTRAST = 4.5;
+
+// Given per-color role assignments, fix the pairs that would render unreadable.
+// Strategy, in order of preference (each keeps every color, invents nothing):
+//   a. If TEXT-on-CARD fails, first try reusing the page background as the card
+//      (the logo simply has one good surface) and re-home the old card color to
+//      the best role it still passes in — muted text, border, else accent.
+//   b. If TEXT-on-PAGE fails outright, swap which color plays body text for the
+//      darkest/most-contrasting color available against the page.
+// Anything we can't make pass by reshuffling is left as-is (rare — and the live
+// accessibility panel still flags it), because the alternative is dropping or
+// fabricating a color, which the product explicitly must not do.
+function repairRolesForContrast(hexes: string[], roles: CustomRole[]): CustomRole[] {
+  const out = [...roles];
+  const idxOf = (role: CustomRole): number => out.indexOf(role);
+  const hexOf = (role: CustomRole): string | undefined => {
+    const i = idxOf(role);
+    return i >= 0 ? hexes[i] : undefined;
+  };
+
+  const pageBg = hexOf("pageBg");
+  const text = hexOf("bodyText");
+
+  // (b) Body text unreadable on the page background → repoint body text to the
+  // color with the strongest contrast against the page, and let the displaced
+  // color take over whatever role body text was doing (they swap).
+  if (pageBg && text && contrastRatio(pageBg, text) < MIN_TEXT_CONTRAST) {
+    let bestIdx = -1;
+    let bestRatio = contrastRatio(pageBg, text);
+    hexes.forEach((h, i) => {
+      const r = contrastRatio(pageBg, h);
+      if (r > bestRatio) {
+        bestRatio = r;
+        bestIdx = i;
+      }
+    });
+    if (bestIdx >= 0) {
+      const textIdx = idxOf("bodyText");
+      // Swap roles so no role is lost and no color is dropped.
+      const displaced = out[bestIdx];
+      out[bestIdx] = "bodyText";
+      if (textIdx >= 0) out[textIdx] = displaced;
+    }
+  }
+
+  // (a) Text unreadable on the CARD background → the card is the wrong surface.
+  // Reuse the page background for cards (one-surface logo) and re-home the old
+  // card color to the best role it still passes in.
+  const cardIdx = idxOf("sectionBg");
+  const bodyHex = hexOf("bodyText");
+  const cardHex = cardIdx >= 0 ? hexes[cardIdx] : undefined;
+  const pageBg2 = hexOf("pageBg"); // may have changed above
+  if (
+    cardIdx >= 0 &&
+    cardHex &&
+    bodyHex &&
+    pageBg2 &&
+    contrastRatio(cardHex, bodyHex) < MIN_TEXT_CONTRAST &&
+    contrastRatio(pageBg2, bodyHex) >= MIN_TEXT_CONTRAST
+  ) {
+    // Re-home the color currently on the card to a role it fits AND passes.
+    // Prefer muted text (needs contrast on the page), then border (decorative,
+    // no hard contrast bar), else accent (always safe to hold a color).
+    const { l, c } = hexToOklch(cardHex);
+    const passesAsMuted =
+      contrastRatio(pageBg2, cardHex) >= 3 && c < 0.08 && l > 0.3 && l < 0.75;
+    const rehome: CustomRole = passesAsMuted
+      ? "secondaryText"
+      : c < 0.06
+        ? "border"
+        : "accent";
+    out[cardIdx] = rehome;
+    // The card role itself now collapses onto the page background — represented
+    // by simply NOT assigning a distinct card color. buildCustomPalette already
+    // falls back sectionBg → pageBg when no card color is assigned, so cards
+    // render on the page surface and read correctly. (We free the role rather
+    // than duplicate the pageBg color into a second row.)
+  }
+
+  return out;
 }
 
 // Build a palette from colors the user assigns to roles directly. We show ONLY

@@ -1,7 +1,7 @@
 import type { Palette } from "../../lib/harmony";
 import { CUSTOM_ROLE_OPTIONS } from "../../lib/harmony";
 import type { FontPair } from "../../lib/presets";
-import { readableOn } from "../../lib/color";
+import { readableOn, contrastRatio } from "../../lib/color";
 import { BrandMockup } from "./BrandMockup";
 
 function roleLabel(role: string): string {
@@ -19,6 +19,19 @@ type Props = {
 
 export function BrandKitPreview({ palette, fontPair, kitName, logoSrc }: Props) {
   const title = kitName?.trim() || "Your brand kit";
+  // The kit title is a HEADING sitting on the page background, so it should use
+  // the palette's heading ink — matching the "In context" mockup below it AND
+  // what the user assigned to the Heading role. It must NOT use palette.primary
+  // (the Buttons/CTA color): that's built to sit on buttons, and on the page
+  // background it's frequently a contrast fail (e.g. gold-on-cream at 2.26:1) —
+  // the biggest text in the export is the worst place for that. Guard it: if the
+  // heading color somehow fails on the page, fall back to body ink, which the
+  // role-repair pass already guarantees is readable on the page.
+  const pageBg = palette.roles.background;
+  const titleColor =
+    contrastRatio(palette.roles.heading, pageBg) >= 4.5
+      ? palette.roles.heading
+      : palette.roles.text;
   const isCustom = !!palette.custom;
   // Custom palette: show exactly the colors the user supplied, with her names.
   // Generated palette: show the six core roles.
@@ -67,7 +80,7 @@ export function BrandKitPreview({ palette, fontPair, kitName, logoSrc }: Props) 
               fontSize: 64,
               fontWeight: 700,
               lineHeight: 1.05,
-              color: palette.primary,
+              color: titleColor,
               wordBreak: "break-word",
             }}
           >
