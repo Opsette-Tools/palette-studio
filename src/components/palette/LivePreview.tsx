@@ -1,8 +1,9 @@
-import { Card, Select, Typography } from "antd";
+import { Card, Typography } from "antd";
 import { useEffect } from "react";
-import { FONT_PAIRS, loadFontPair, type FontPair } from "../../lib/presets";
+import { FONT_PAIRS, loadFontPair, getFontPair, type FontPair } from "../../lib/presets";
 import type { Palette } from "../../lib/harmony";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { OpsetteFontPicker } from "../opsette-font-picker";
 import { BrandMockup } from "./BrandMockup";
 
 type Props = {
@@ -32,33 +33,17 @@ export function LivePreview({ palette, pair, onFontChange }: Props) {
       styles={{ body: { padding: 16 } }}
       extra={<span style={{ fontSize: 12, color: "#6b7280" }}>Your colors, in a real layout</span>}
     >
-      {/* One dropdown for the whole font library (it's grown past what a chip grid
-          can hold). Each option renders in its OWN heading font, so the menu is a
-          real type preview rather than a plain list. */}
+      {/* The shared Opsette font picker: grouped by vibe, each option in its own
+          heading font. Value is the library pairing id; resolve it back to the
+          flat FontPair this preview + the exported kit use. */}
       <div style={{ marginBottom: 12 }}>
         <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
           Font pairing
         </Typography.Text>
-        <Select
+        <OpsetteFontPicker
           value={pair.id}
-          onChange={(id) => onFontChange(FONT_PAIRS.find((f) => f.id === id)!)}
-          style={{ width: "100%" }}
+          onChange={(id) => onFontChange(getFontPair(id))}
           size={isMobile ? "large" : "middle"}
-          // Show the picked pair's name in its own font in the closed control too.
-          labelRender={({ value }) => {
-            const f = FONT_PAIRS.find((p) => p.id === value);
-            return <span style={{ fontFamily: f?.headingFamily }}>{f?.label}</span>;
-          }}
-          options={FONT_PAIRS.map((f) => ({
-            value: f.id,
-            label: (
-              <span style={{ fontFamily: f.headingFamily, fontSize: 15 }}>{f.label}</span>
-            ),
-          }))}
-          // Make the preview real: each option's font is loaded as the menu opens.
-          onDropdownVisibleChange={(open) => {
-            if (open) FONT_PAIRS.forEach(loadFontPair);
-          }}
         />
       </div>
 
