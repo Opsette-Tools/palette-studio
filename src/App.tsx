@@ -9,6 +9,7 @@ import { TemperaturePicker } from "./components/palette/TemperaturePicker";
 import { PaletteGrid } from "./components/palette/PaletteGrid";
 import { ScaleStrips } from "./components/palette/ScaleStrips";
 import { ContrastReport } from "./components/palette/ContrastReport";
+import { RoleOverridesPanel } from "./components/palette/RoleOverrides";
 import { LivePreview } from "./components/palette/LivePreview";
 import { ExportPanel, type BuildKitBlob } from "./components/palette/ExportPanel";
 import {
@@ -18,6 +19,9 @@ import {
   type Vibrancy,
   type Temperature,
   type CustomColor,
+  type RoleOverrides,
+  type RoleKey,
+  derivedRoleColors,
 } from "./lib/harmony";
 import { FONT_PAIRS, loadFontPair } from "./lib/presets";
 import { fromKitJson } from "./lib/exporters";
@@ -39,6 +43,10 @@ type State = {
   vibrancy: Vibrancy;
   temperature: Temperature;
   fontPairId: string;
+  // Per-role hex pins for a generated palette (see RoleOverrides). Empty = every
+  // role derived. A base/rule/vibrancy/temperature change does NOT clear these —
+  // a pinned border stays pinned as you tune the harmony, which is the point.
+  roleOverrides: RoleOverrides;
 };
 type Action =
   | { type: "setBase"; hex: string }
@@ -46,6 +54,8 @@ type Action =
   | { type: "setVibrancy"; vibrancy: Vibrancy }
   | { type: "setTemperature"; temperature: Temperature }
   | { type: "setFont"; id: string }
+  | { type: "setRoleOverride"; role: RoleKey; hex: string }
+  | { type: "clearRoleOverride"; role: RoleKey }
   | { type: "hydrate"; state: State };
 
 const INITIAL: State = {
@@ -54,6 +64,7 @@ const INITIAL: State = {
   vibrancy: "balanced",
   temperature: "neutral",
   fontPairId: "inter",
+  roleOverrides: {},
 };
 
 function reducer(s: State, a: Action): State {
@@ -68,8 +79,17 @@ function reducer(s: State, a: Action): State {
       return { ...s, temperature: a.temperature };
     case "setFont":
       return { ...s, fontPairId: a.id };
+    case "setRoleOverride":
+      return { ...s, roleOverrides: { ...s.roleOverrides, [a.role]: a.hex } };
+    case "clearRoleOverride": {
+      const next = { ...s.roleOverrides };
+      delete next[a.role];
+      return { ...s, roleOverrides: next };
+    }
     case "hydrate":
-      return a.state;
+      // Older saved/loaded state may predate roleOverrides — default it so a
+      // hydrate never leaves the field undefined.
+      return { ...a.state, roleOverrides: a.state.roleOverrides ?? {} };
   }
 }
 
@@ -95,10 +115,12 @@ export default function App() {
   // save handler always bakes current palette state without re-subscribing.
   const buildBlobRef = useRef<BuildKitBlob | null>(null);
   const [saving, setSaving] = useState(false);
-  // The kit name carried in on the loaded blob, so a save round-trips it back
-  // instead of relabeling the client's palette "Untitled". Only set in embed
-  // mode (the standalone app collects the name in the export modal instead).
-  const [embedKitName, setEmbedKitName] = useState<string>("");
+  // The single source of truth for the kit name — one field across every path:
+  // the standalone Export card / download modal, the "Export to Brand Board"
+  // blob, the embed round-trip save, AND reopen (a pasted/loaded blob restores
+  // its name here). ExportPanel edits it as a controlled prop; the embed save
+  // reads it directly, so a client's palette never silently relabels "Untitled".
+  const [kitName, setKitName] = useState<string>("");
 
   useEffect(() => {
     // A ?seed= brand core (Mechanism 1) wins over the last-saved palette: when
@@ -118,15 +140,31 @@ export default function App() {
       return;
     }
     const saved = loadSaved();
-    if (saved) dispatch({ type: "hydrate", state: saved });
+    if (saved) {
+      dispatch({
+        type: "hydrate",
+        state: {
+          baseHex: saved.baseHex,
+          rule: saved.rule,
+          vibrancy: saved.vibrancy,
+          temperature: saved.temperature,
+          fontPairId: saved.fontPairId,
+          roleOverrides: saved.roleOverrides,
+        },
+      });
+      // Restore the "My own colors" list too — a non-empty list reopens the app
+      // in custom mode, so a hand-typed palette survives a refresh instead of
+      // making the user re-paste every hex.
+      if (saved.customColors.length > 0) setCustomColors(saved.customColors);
+    }
   }, [embedded]);
 
   useEffect(() => {
     // Don't persist while embedded — editing a client's palette in the Brand
     // Board drawer must not overwrite this device's own standalone palette.
     if (embedded) return;
-    saveState(state);
-  }, [state, embedded]);
+    saveState({ ...state, customColors });
+  }, [state, customColors, embedded]);
 
   const fontPair = useMemo(
     () => FONT_PAIRS.find((f) => f.id === state.fontPairId) ?? FONT_PAIRS[0],
@@ -149,7 +187,7 @@ export default function App() {
       return null;
     }
     const d = payload.data;
-    if (typeof d.kitName === "string") setEmbedKitName(d.kitName);
+    if (typeof d.kitName === "string") setKitName(d.kitName);
     const isCustomPayload = Boolean(d.custom && d.custom.length > 0);
     if (isCustomPayload && d.custom) {
       // "My own colors" palette — restore the exact user-supplied colors.
@@ -157,6 +195,21 @@ export default function App() {
     } else {
       // Generated palette — restore the harmony inputs and leave custom mode.
       setCustomColors([]);
+      // Re-derive the roles this base/rule/vibrancy/temperature would produce and
+      // pin ONLY the ones the blob's saved roles differ from. That keeps a hand-
+      // tuned border (or any role) across the round trip without needlessly
+      // pinning the roles that were never changed — so re-tuning the harmony
+      // still moves the un-pinned roles as expected.
+      const roleOverrides: RoleOverrides = {};
+      if (d.roles && typeof d.roles === "object") {
+        const derived = derivedRoleColors(d.base, d.rule, d.vibrancy, d.temperature);
+        (Object.keys(derived) as RoleKey[]).forEach((k) => {
+          const saved = d.roles[k];
+          if (typeof saved === "string" && saved.toLowerCase() !== derived[k].toLowerCase()) {
+            roleOverrides[k] = saved;
+          }
+        });
+      }
       dispatch({
         type: "hydrate",
         state: {
@@ -165,6 +218,7 @@ export default function App() {
           vibrancy: d.vibrancy,
           temperature: d.temperature,
           fontPairId: FONT_PAIRS.some((f) => f.id === d.font.id) ? d.font.id : INITIAL.fontPairId,
+          roleOverrides,
         },
       });
     }
@@ -213,7 +267,7 @@ export default function App() {
     try {
       // Round-trip the client's kit name (carried in on load) so the revised
       // palette lands back in Brand Board still labeled for that client.
-      const name = embedKitName.trim() || "Untitled palette";
+      const name = kitName.trim() || "Untitled palette";
       const json = await build(name);
       const targetOrigin = import.meta.env.DEV ? "*" : OPSETTE_TOOLS_ORIGIN;
       window.parent.postMessage(embedSave(json), targetOrigin);
@@ -229,8 +283,22 @@ export default function App() {
     () =>
       isCustom
         ? buildCustomPalette(customColors)
-        : buildPalette(state.baseHex, state.rule, state.vibrancy, state.temperature),
-    [isCustom, customColors, state.baseHex, state.rule, state.vibrancy, state.temperature],
+        : buildPalette(
+            state.baseHex,
+            state.rule,
+            state.vibrancy,
+            state.temperature,
+            state.roleOverrides,
+          ),
+    [
+      isCustom,
+      customColors,
+      state.baseHex,
+      state.rule,
+      state.vibrancy,
+      state.temperature,
+      state.roleOverrides,
+    ],
   );
 
   return (
@@ -350,6 +418,21 @@ export default function App() {
             >
               <PaletteGrid palette={palette} />
               <ContrastReport palette={palette} />
+              {/* Role overrides — generated mode only. In "My own colors" mode
+                  roles are assigned directly, so there's nothing to override. */}
+              {!isCustom && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <RoleOverridesPanel
+                    base={state.baseHex}
+                    rule={state.rule}
+                    vibrancy={state.vibrancy}
+                    temperature={state.temperature}
+                    overrides={state.roleOverrides}
+                    onSet={(role, hex) => dispatch({ type: "setRoleOverride", role, hex })}
+                    onClear={(role) => dispatch({ type: "clearRoleOverride", role })}
+                  />
+                </div>
+              )}
               <div style={{ gridColumn: "1 / -1" }}>
                 <ScaleStrips
                   primary={palette.primaryScale}
@@ -361,6 +444,8 @@ export default function App() {
                 <ExportPanel
                   palette={palette}
                   fontPair={fontPair}
+                  kitName={kitName}
+                  onKitNameChange={setKitName}
                   onBuildBlobReady={(build) => {
                     buildBlobRef.current = build;
                   }}

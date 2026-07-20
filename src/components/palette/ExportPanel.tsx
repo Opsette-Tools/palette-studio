@@ -101,10 +101,16 @@ export type BuildKitBlob = (kitName: string) => Promise<string>;
 export function ExportPanel({
   palette,
   fontPair,
+  kitName,
+  onKitNameChange,
   onBuildBlobReady,
 }: {
   palette: Palette;
   fontPair: FontPair;
+  // The kit name is owned by App (one source of truth across export, download,
+  // reopen, and the embed save) and edited here as a controlled field.
+  kitName: string;
+  onKitNameChange: (name: string) => void;
   // Handed the current blob-builder whenever the palette/fonts change, so an
   // embedding parent can request the freshest baked blob at save time.
   onBuildBlobReady?: (build: BuildKitBlob) => void;
@@ -120,7 +126,6 @@ export function ExportPanel({
   // being open. Pixel-identical to the modal preview (same component, same props).
   const bakeRef = useRef<HTMLDivElement | null>(null);
   const [logoSrc, setLogoSrc] = useState<string>("");
-  const [kitName, setKitName] = useState<string>("");
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -257,6 +262,25 @@ export function ExportPanel({
         </Space>
       }
     >
+      {/* Name the kit up front — this single field feeds BOTH "Export to Brand
+          Board" and the download modal, so a palette is never exported as
+          "Untitled" just because the download modal was never opened. */}
+      <Form layout="vertical" style={{ marginBottom: 16 }}>
+        <Form.Item
+          label="Kit name"
+          help="Names this palette everywhere it goes — the Brand Board export, the brand-kit image, and the download file name."
+          style={{ marginBottom: 0 }}
+        >
+          <Input
+            value={kitName}
+            onChange={(e) => onKitNameChange(e.target.value)}
+            placeholder="e.g. Sunrise Bakery"
+            maxLength={60}
+            style={{ maxWidth: 360 }}
+          />
+        </Form.Item>
+      </Form>
+
       <Tabs
         items={[
           { key: "css", label: "CSS variables", children: <CopyBlock code={toCssVars(palette)} /> },
@@ -288,13 +312,13 @@ export function ExportPanel({
             <Form layout="vertical">
               <Form.Item
                 label="Kit name"
-                help="Shown on the brand kit image and used as the file name. Type to see it update on the right."
+                help="Shown on the brand kit image and used as the file name. Type to see it update on the right — this is the same name you set on the export card."
                 style={{ marginBottom: 20 }}
               >
                 <Input
                   autoFocus
                   value={kitName}
-                  onChange={(e) => setKitName(e.target.value)}
+                  onChange={(e) => onKitNameChange(e.target.value)}
                   placeholder="e.g. Sunrise Bakery"
                   maxLength={60}
                 />

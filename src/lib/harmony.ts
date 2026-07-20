@@ -204,14 +204,38 @@ export type Palette = {
   custom?: CustomColor[];
 };
 
+// The six semantic role colors are DERIVED from the neutral ramp (see below).
+// A generated palette can override any of them with an exact hex — e.g. the
+// border defaults to a faintly brand-tinted neutral, which some users read as an
+// unwanted tint; an override lets you pin it to a true grey (or anything else).
+// Only the keys the user has pinned appear here; unset roles keep their derived
+// value. Rides in the blob via `roles` and restores on reopen.
+export type RoleKey = "background" | "surface" | "text" | "heading" | "mutedText" | "border";
+export type RoleOverrides = Partial<Record<RoleKey, string>>;
+
 export function buildPalette(
   base: string,
   rule: HarmonyRule,
   vibrancy: Vibrancy = "balanced",
   temperature: Temperature = "neutral",
+  overrides: RoleOverrides = {},
 ): Palette {
   const { primary, secondary, accent, accent2 } = harmonize(base, rule, vibrancy, temperature);
   const neutrals = buildNeutralRamp(primary);
+  const derivedRoles = {
+    background: neutrals[50],
+    surface: "#ffffff",
+    text: neutrals[900],
+    heading: neutrals[900],
+    mutedText: neutrals[600],
+    border: neutrals[200],
+  };
+  // Apply only the roles the user has explicitly pinned; the rest stay derived.
+  const roles = { ...derivedRoles };
+  (Object.keys(overrides) as RoleKey[]).forEach((k) => {
+    const hex = overrides[k];
+    if (hex) roles[k] = hex;
+  });
   return {
     base,
     rule,
@@ -224,16 +248,26 @@ export function buildPalette(
     neutrals,
     primaryScale: buildScale(primary),
     accentScale: buildScale(accent),
-    roles: {
-      background: neutrals[50],
-      surface: "#ffffff",
-      text: neutrals[900],
-      // Headings share the body ink by default — bigger/bolder, same color — which
-      // is how most real sites read. The CTA/brand color stays on buttons & links.
-      heading: neutrals[900],
-      mutedText: neutrals[600],
-      border: neutrals[200],
-    },
+    // Headings share the body ink by default — bigger/bolder, same color — which
+    // is how most real sites read; the CTA/brand color stays on buttons & links.
+    // Any of these six may be pinned via `overrides` (see above).
+    roles,
+  };
+}
+
+// The derived (un-pinned) value for each role, so a "reset to default" control
+// can show the user what a role reverts to. Mirrors the derivation in
+// buildPalette — kept as a tiny pure helper rather than duplicated in the UI.
+export function derivedRoleColors(base: string, rule: HarmonyRule, vibrancy: Vibrancy, temperature: Temperature): Record<RoleKey, string> {
+  const { primary } = harmonize(base, rule, vibrancy, temperature);
+  const neutrals = buildNeutralRamp(primary);
+  return {
+    background: neutrals[50],
+    surface: "#ffffff",
+    text: neutrals[900],
+    heading: neutrals[900],
+    mutedText: neutrals[600],
+    border: neutrals[200],
   };
 }
 
@@ -455,13 +489,38 @@ function repairRolesForContrast(hexes: string[], roles: CustomRole[]): CustomRol
   return out;
 }
 
+// A subtle BORDER derived from the surface it sits on, not a foreign constant.
+// A real border is a small lightness step off its background so a divider/input
+// outline reads without shouting. We nudge toward the page's text direction
+// (darker on a light UI, lighter on a dark UI) and keep only a whisper of the
+// surface's own hue, so the line belongs to the palette instead of pasting in a
+// slate blue. Chroma is held very low so it never looks like a "color."
+function deriveBorder(surface: string, onLight: boolean): string {
+  const s = hexToOklch(surface);
+  const l = onLight ? clampL(s.l - 0.1) : clampL(s.l + 0.14);
+  return oklchToHex({ l, c: Math.min(s.c, 0.02), h: s.h });
+}
+
+// MUTED text derived from the actual body text: same ink, dialed toward the
+// background so it reads as "quieter," never an invented grey. Keeps enough
+// contrast to stay legible.
+function deriveMuted(text: string, background: string): string {
+  const t = hexToOklch(text);
+  const bg = hexToOklch(background);
+  // Move ~35% of the way from the text lightness toward the background — softer,
+  // but still clearly readable copy rather than a decorative tint.
+  const l = clampL(t.l + (bg.l - t.l) * 0.35);
+  return oklchToHex({ l, c: Math.min(t.c, 0.03), h: t.h });
+}
+
 // Build a palette from colors the user assigns to roles directly. We show ONLY
 // the colors she typed — nothing is invented. Every role that drives the app
 // (primary/secondary/accent + the roles map) is filled from her assignments;
 // the scale strips are built from her primary/accent so the export stays
 // complete, but no extra *swatches* are conjured. Any role she leaves unassigned
-// falls back to a readable default derived from the colors she DID give, never a
-// random hue — so a 2-color palette still renders legible text and surfaces.
+// falls back to a readable default DERIVED from the colors she DID give (border
+// steps off the surface, muted text softens the body ink) — never a foreign
+// slate constant — so a 2-color palette still renders legible, on-brand.
 export function buildCustomPalette(colors: CustomColor[]): Palette {
   const cleaned = colors
     .filter((c) => /^#[0-9a-fA-F]{6}$/.test(normalizeHex(c.hex)))
@@ -509,10 +568,11 @@ export function buildCustomPalette(colors: CustomColor[]): Palette {
       surface,
       text,
       heading,
-      // Secondary text falls back to a readable softer tone, never an invented hue.
-      mutedText:
-        byRole("secondaryText") ?? (readableOn(background) === "#ffffff" ? "#cbd5e1" : "#64748b"),
-      border: byRole("border") ?? (readableOn(background) === "#ffffff" ? "#334155" : "#e2e8f0"),
+      // Missing roles are DERIVED from the colors she gave, never a foreign slate
+      // constant: muted text is her body ink softened toward the page; the border
+      // is a small step off the surface. `onLight` = the page wants dark text.
+      mutedText: byRole("secondaryText") ?? deriveMuted(text, background),
+      border: byRole("border") ?? deriveBorder(surface, readableOn(background) !== "#ffffff"),
     },
     custom: cleaned,
   };
